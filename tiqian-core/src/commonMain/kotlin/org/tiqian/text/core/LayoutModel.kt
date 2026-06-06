@@ -49,6 +49,7 @@ data class LayoutResult(
 
 data class LayoutDebugInfo(
     val fontDecisions: List<FontDecisionInfo> = emptyList(),
+    val shapingDecisions: List<ShapingDecisionInfo> = emptyList(),
     val metricDecisions: List<MetricDecisionInfo> = emptyList(),
     val punctuationDecisions: List<PunctuationDecisionInfo> = emptyList(),
     val spacingDecisions: List<SpacingDecisionInfo> = emptyList(),
@@ -65,6 +66,17 @@ data class FontDecisionInfo(
     val fontKey: String,
     val reason: String,
     val substitutionReason: String,
+)
+
+data class ShapingDecisionInfo(
+    val range: TextRange,
+    val sourceText: String,
+    val displayText: String,
+    val fontKey: String,
+    val glyphCount: Int,
+    val advance: Float,
+    val source: String,
+    val reason: String,
 )
 
 data class MetricDecisionInfo(

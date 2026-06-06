@@ -7,8 +7,12 @@ import org.tiqian.text.core.LayoutConstraints
 import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.TiqianTextContent
 import org.tiqian.text.font.FontRole
+import org.tiqian.text.shaping.ShapingInput
+import org.tiqian.text.shaping.ShapingResult
+import org.tiqian.text.shaping.TextShaper
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ExplainableStubParagraphLayoutEngineTest {
@@ -41,6 +45,25 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun rejectsShaperClustersThatDoNotCoverFontDecisionRange() {
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                override fun shape(input: ShapingInput): ShapingResult =
+                    ShapingResult(clusters = emptyList(), glyphRuns = emptyList())
+            },
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            engine.layout(
+                LayoutInput(
+                    content = TiqianTextContent("提椠"),
+                    constraints = LayoutConstraints(maxWidth = 240f),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun recordsFallbackDecisionsPerCluster() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
@@ -63,6 +86,14 @@ class ExplainableStubParagraphLayoutEngineTest {
                     it.displayText == "⸺" &&
                     it.role == FontRole.CjkPunctuation.name &&
                     it.fontKey == "cjk-primary"
+            },
+        )
+        assertTrue(
+            result.debug.shapingDecisions.any {
+                it.sourceText == "——" &&
+                    it.displayText == "⸺" &&
+                    it.advance == 32f &&
+                    it.source == "Stub"
             },
         )
         assertTrue(

@@ -247,6 +247,16 @@ private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Fl
 private fun renderEngineMetadata(label: String, result: LayoutResult): String =
     buildString {
         appendLine("<div class=\"col-label\">${label.escapeHtml()}</div>")
+        if (result.debug.shapingDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.shapingDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">shape ${decision.range.start}-${decision.range.end} " +
+                        "'${decision.displayText.escapeHtml()}' ${decision.advance.oneDecimal()} ${decision.source}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
         result.lines.forEachIndexed { lineIndex, line ->
             val repair = result.debug.lineDecisions.getOrNull(lineIndex)
             val justification = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }

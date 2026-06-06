@@ -28,7 +28,7 @@ Up next:        Slice 6 (shaping adapter + golden tests)
 | 3.5 | — | Explainability hardening：结构化 decision 类型替代 stringly dump；SpacingPlan 替代 advance mutation；classifier 接 profile；可重复标点进 clreq 表；role override 进 dump | 现有所有 fixture 不变 | 所有现有测试绿；`LayoutResult` 暴露结构化 `clusterDecisions / spacingPlan` 字段 | done |
 | 4 | M3 | BreakCandidate / RepairOption；`PushIn` `CarryPrevious`；greedy + lookahead；`Hang` 仅保留 profile opt-in 路径 | `kinsoku-carry-previous` `kinsoku-push-in` `lookahead-future-push-in` `lookahead-avoids-repair` | `./gradlew :tiqian-layout:jvmTest` + `./gradlew :tiqian-playground:runPlayground`；dump `line:*` 行，多行非单 placeholder | done (`PushIn` / `CarryPrevious` / `LeaveRagged` 有结构化 chosen repair + candidates；lookahead window 1；window 2~3 改列后续 opt-in optimization；Hang 推到后续 opt-in slice) |
 | 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；WordSpace 待 shaping 分词后启用) |
-| 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | todo |
+| 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | wip (6a: shaping contract + `ExplainableStubTextShaper` + debug decisions；ADR 0008；真实 Android / Skia adapter 未接) |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 

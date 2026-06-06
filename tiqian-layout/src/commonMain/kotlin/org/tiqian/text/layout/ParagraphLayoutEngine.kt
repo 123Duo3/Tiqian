@@ -3,7 +3,6 @@ package org.tiqian.text.layout
 import org.tiqian.text.clreq.BuiltInClreqProfileResolver
 import org.tiqian.text.clreq.ClreqProfile
 import org.tiqian.text.clreq.ClreqProfileResolver
-import org.tiqian.text.clreq.ClreqPunctuationAdvancePolicy
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
 import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.FontDecisionInfo
@@ -32,6 +31,7 @@ import org.tiqian.text.font.FontMetricsNormalizationInput
 import org.tiqian.text.font.FontMetricsNormalizer
 import org.tiqian.text.font.FontMetricsRequest
 import org.tiqian.text.font.FontMetricsResolver
+import org.tiqian.text.font.FontDecision
 import org.tiqian.text.font.FontRequest
 import org.tiqian.text.font.FontRole
 import org.tiqian.text.font.FontRoleClassifier
@@ -41,6 +41,9 @@ import org.tiqian.text.font.PreferCjkForAmbiguousPunctuationResolver
 import org.tiqian.text.font.RawFontMetrics
 import org.tiqian.text.font.ScriptAwareFontMetricsNormalizer
 import org.tiqian.text.font.StubFontMetricsResolver
+import org.tiqian.text.shaping.ExplainableStubTextShaper
+import org.tiqian.text.shaping.ShapingInput
+import org.tiqian.text.shaping.TextShaper
 
 interface ParagraphLayoutEngine {
     fun layout(input: LayoutInput): LayoutResult
@@ -57,6 +60,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val quotePairAnalyzer: QuotePairAnalyzer = QuotePairAnalyzer(),
     private val lineBreaker: LineBreaker = GreedyLineBreaker(),
     private val justifier: Justifier = Justifier(),
+    private val textShaper: TextShaper = ExplainableStubTextShaper(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -93,20 +97,22 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val naturalClusters = fontDecisions.map { decision ->
+        val shapingResults = fontDecisions.map { decision ->
             val sourceText = text.substring(decision.range.start, decision.range.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-            Cluster(
-                range = decision.range,
-                text = sourceText,
-                displayText = substitution.displayText,
-                fontKey = decision.candidate.key,
-                advance = fontSize * ClreqPunctuationAdvancePolicy.advanceEm(
-                    sourceText = sourceText,
+            textShaper.shape(
+                ShapingInput(
+                    text = text,
+                    range = decision.range,
+                    style = input.textStyle,
+                    fontDecision = decision,
                     displayText = substitution.displayText,
                 ),
             )
         }
+        val naturalClusters = shapingResults.flatMap { it.clusters }
+        val shapingDecisions = shapingResults.flatMap { it.decisions }
+        naturalClusters.requireCoveredBy(fontDecisions)
 
         val punctuationAtoms = naturalClusters.flatMap { cluster ->
             cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
@@ -150,7 +156,9 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val clusterRoles = fontDecisions.map { it.role }
+        val clusterRoles = naturalClusters.map { cluster ->
+            fontDecisions.first { cluster.range.isInside(it.range) }.role
+        }
         val pushInShrinkByCluster = lineSolution.lines
             .mapNotNull { it.repair as? RepairOption.PushIn }
             .groupBy { it.targetClusterIndex }
@@ -249,6 +257,7 @@ class ExplainableStubParagraphLayoutEngine(
                         substitutionReason = substitution.reason,
                     )
                 },
+                shapingDecisions = shapingDecisions,
                 metricDecisions = metricDecisions.map { decision ->
                     MetricDecisionInfo(
                         range = decision.range,
@@ -447,6 +456,23 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun TextRange.isInside(other: TextRange): Boolean =
         start >= other.start && end <= other.end
+
+    private fun List<Cluster>.requireCoveredBy(fontDecisions: List<FontDecision>) {
+        fontDecisions.forEach { decision ->
+            val coveringClusters = filter { cluster -> cluster.range.isInside(decision.range) }
+                .sortedBy { it.range.start }
+            var cursor = decision.range.start
+            for (cluster in coveringClusters) {
+                require(cluster.range.start == cursor) {
+                    "TextShaper returned non-contiguous clusters for ${decision.range}: $coveringClusters"
+                }
+                cursor = cluster.range.end
+            }
+            require(cursor == decision.range.end) {
+                "TextShaper must return clusters covering ${decision.range}; coveredUntil=$cursor"
+            }
+        }
+    }
 
     private fun List<Cluster>.pushInCapacities(atoms: List<PunctuationAtom>): Map<Int, Float> {
         if (atoms.isEmpty()) return emptyMap()
