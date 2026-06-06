@@ -47,12 +47,17 @@ private fun printFixtureDump(fixture: LayoutFixture, result: LayoutResult) {
     println("  text=${fixture.text}")
     println("  width natural=${naturalWidth.oneDecimal()} adjusted=${adjustedWidth.oneDecimal()} result=${result.size.width.oneDecimal()}")
     println("  clusters=${result.clusters.joinToString(" | ") { it.compactDump() }}")
-    if (result.debug.punctuationSpacingDecisions.isNotEmpty()) {
+    if (result.debug.spacingDecisions.isNotEmpty()) {
         println("  spacing:")
-        result.debug.punctuationSpacingDecisions.forEach { println("    $it") }
+        result.debug.spacingDecisions.forEach { println("    ${it.compactDump()}") }
     }
     println()
 }
+
+private fun org.tiqian.text.core.SpacingDecisionInfo.compactDump(): String =
+    "${range.start}-${range.end} '$leftChar$rightChar' " +
+        "naturalInner=${naturalInnerGlue.oneDecimal()} adjustedInner=${adjustedInnerGlue.oneDecimal()} " +
+        "reduction=${reduction.oneDecimal()} target=${reductionTargetRange.start}-${reductionTargetRange.end} $reason"
 
 private fun Cluster.compactDump(): String =
     "${range.start}-${range.end} '$displayText' ${advance.oneDecimal()} $fontKey"
@@ -97,7 +102,7 @@ private fun PlaygroundReportItem.renderSection(): String {
     val line = result.lines.singleOrNull()
     val naturalWidth = line?.naturalWidth ?: result.size.width
     val adjustedWidth = line?.adjustedWidth ?: result.size.width
-    val spacing = result.debug.punctuationSpacingDecisions
+    val spacing = result.debug.spacingDecisions
 
     return buildString {
         appendLine("<section>")
@@ -115,7 +120,7 @@ private fun PlaygroundReportItem.renderSection(): String {
         result.clusters.forEach { cluster -> appendLine(cluster.renderCluster()) }
         appendLine("</div>")
         if (spacing.isNotEmpty()) {
-            appendLine("<pre>${spacing.joinToString("\n").escapeHtml()}</pre>")
+            appendLine("<pre>${spacing.joinToString("\n") { it.compactDump() }.escapeHtml()}</pre>")
         }
         appendLine("</section>")
     }

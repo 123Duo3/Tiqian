@@ -3,6 +3,7 @@ package org.tiqian.text.layout
 import org.tiqian.text.core.TextRange
 import org.tiqian.text.font.FontRole
 import org.tiqian.text.font.FontRoleClassifier
+import org.tiqian.text.font.FontRoleContext
 
 data class QuotePair(
     val openIndex: Int,
@@ -58,10 +59,11 @@ class QuotePairAnalyzer {
         text: String,
         pairs: List<QuotePair>,
         fontRoleClassifier: FontRoleClassifier,
+        context: FontRoleContext = FontRoleContext(),
     ): Map<Int, FontRole> {
         val result = mutableMapOf<Int, FontRole>()
         for (pair in pairs) {
-            val role = resolvePairContext(text, pair, fontRoleClassifier)
+            val role = resolvePairContext(text, pair, fontRoleClassifier, context)
             result[pair.openIndex] = role
             result[pair.closeIndex] = role
         }
@@ -79,23 +81,27 @@ class QuotePairAnalyzer {
         text: String,
         pair: QuotePair,
         classifier: FontRoleClassifier,
+        context: FontRoleContext,
     ): FontRole =
         scanLeftForMeaningfulRole(
             text = text,
             startIndex = pair.openIndex - 1,
             classifier = classifier,
+            context = context,
         )
             ?: scanRightForMeaningfulRole(
                 text = text,
                 startIndex = pair.openIndex + 1,
                 endIndex = pair.closeIndex,
                 classifier = classifier,
+                context = context,
             )
             ?: scanRightForMeaningfulRole(
                 text = text,
                 startIndex = pair.closeIndex + 1,
                 endIndex = text.length,
                 classifier = classifier,
+                context = context,
             )
             ?: FontRole.CjkPunctuation
 
@@ -110,6 +116,7 @@ class QuotePairAnalyzer {
         text: String,
         startIndex: Int,
         classifier: FontRoleClassifier,
+        context: FontRoleContext,
     ): FontRole? {
         var i = startIndex
         while (i >= 0) {
@@ -131,7 +138,7 @@ class QuotePairAnalyzer {
                 i
             }
 
-            val role = classifier.classify(text, TextRange(startIndex, i + 1))
+            val role = classifier.classify(text, TextRange(startIndex, i + 1), context)
             when (role) {
                 FontRole.LatinText -> return FontRole.LatinText
                 FontRole.CjkText, FontRole.CjkPunctuation -> return FontRole.CjkPunctuation
@@ -147,6 +154,7 @@ class QuotePairAnalyzer {
         startIndex: Int,
         endIndex: Int,
         classifier: FontRoleClassifier,
+        context: FontRoleContext,
     ): FontRole? {
         var i = startIndex
         while (i < endIndex) {
@@ -167,7 +175,7 @@ class QuotePairAnalyzer {
                 1
             }
 
-            val role = classifier.classify(text, TextRange(i, i + charCount))
+            val role = classifier.classify(text, TextRange(i, i + charCount), context)
             when (role) {
                 FontRole.LatinText -> return FontRole.LatinText
                 FontRole.CjkText, FontRole.CjkPunctuation -> return FontRole.CjkPunctuation
@@ -208,6 +216,6 @@ class QuotePairAwareFontRoleClassifier(
     private val delegate: FontRoleClassifier,
     private val quoteRoles: Map<Int, FontRole>,
 ) : FontRoleClassifier {
-    override fun classify(text: String, range: TextRange): FontRole =
-        quoteRoles[range.start] ?: delegate.classify(text, range)
+    override fun classify(text: String, range: TextRange, context: FontRoleContext): FontRole =
+        quoteRoles[range.start] ?: delegate.classify(text, range, context)
 }

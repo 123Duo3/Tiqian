@@ -1,10 +1,12 @@
 package org.tiqian.text.layout
 
 import org.tiqian.text.clreq.BuiltInClreqProfileResolver
+import org.tiqian.text.clreq.ClreqProfile
+import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.clreq.ClreqPunctuationAdvancePolicy
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
-import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.core.Cluster
+import org.tiqian.text.core.FontDecisionInfo
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
 import org.tiqian.text.core.LayoutDebugInfo
@@ -12,7 +14,12 @@ import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.LayoutResult
 import org.tiqian.text.core.LineBox
 import org.tiqian.text.core.LineDebugInfo
+import org.tiqian.text.core.LineDecisionInfo
+import org.tiqian.text.core.MetricDecisionInfo
+import org.tiqian.text.core.PunctuationDecisionInfo
+import org.tiqian.text.core.RoleOverrideInfo
 import org.tiqian.text.core.Size
+import org.tiqian.text.core.SpacingDecisionInfo
 import org.tiqian.text.core.TextRange
 import org.tiqian.text.font.CjkFontRoleClassifier
 import org.tiqian.text.font.FallbackResolver
@@ -23,6 +30,7 @@ import org.tiqian.text.font.FontMetricsResolver
 import org.tiqian.text.font.FontRequest
 import org.tiqian.text.font.FontRole
 import org.tiqian.text.font.FontRoleClassifier
+import org.tiqian.text.font.FontRoleContext
 import org.tiqian.text.font.LayoutFontMetrics
 import org.tiqian.text.font.PreferCjkForAmbiguousPunctuationResolver
 import org.tiqian.text.font.RawFontMetrics
@@ -46,23 +54,27 @@ class ExplainableStubParagraphLayoutEngine(
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
-        val advance = fontSize
         val clreqProfile = clreqProfileResolver.resolve(input.profileId)
+        val context = FontRoleContext(
+            locale = input.textStyle.locale,
+            regionHint = clreqProfile.region.name,
+        )
         val punctuationGlyphSubstitutor = ClreqPunctuationGlyphSubstitutor(
             policy = clreqProfile.punctuationGlyphPolicy,
         )
 
         val quotePairs = quotePairAnalyzer.analyze(text)
-        val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier)
+        val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier, context)
+        val roleOverrideInfos = quoteRoleOverrides.toRoleOverrideInfos(text, fontRoleClassifier, context)
         val effectiveClassifier: FontRoleClassifier = if (quoteRoleOverrides.isNotEmpty()) {
             QuotePairAwareFontRoleClassifier(fontRoleClassifier, quoteRoleOverrides)
         } else {
             fontRoleClassifier
         }
 
-        val clusterRanges = clusterRanges(text, effectiveClassifier)
+        val clusterRanges = clusterRanges(text, effectiveClassifier, context, clreqProfile)
         val fontDecisions = clusterRanges.map { range ->
-            val role = effectiveClassifier.classify(text, range)
+            val role = effectiveClassifier.classify(text, range, context)
             fallbackResolver.resolve(
                 text = text,
                 range = range,
@@ -74,7 +86,7 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val naturalClusters = fontDecisions.map { decision ->
+        val clusters = fontDecisions.map { decision ->
             val sourceText = text.substring(decision.range.start, decision.range.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
             Cluster(
@@ -82,21 +94,17 @@ class ExplainableStubParagraphLayoutEngine(
                 text = sourceText,
                 displayText = substitution.displayText,
                 fontKey = decision.candidate.key,
-                advance = advance * ClreqPunctuationAdvancePolicy.advanceEm(
+                advance = fontSize * ClreqPunctuationAdvancePolicy.advanceEm(
                     sourceText = sourceText,
                     displayText = substitution.displayText,
                 ),
             )
         }
 
-        val punctuationAtoms = naturalClusters.flatMap { cluster ->
-            cluster.punctuationAtoms(
-                em = fontSize,
-                builder = punctuationAtomBuilder,
-            )
+        val punctuationAtoms = clusters.flatMap { cluster ->
+            cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
         }
-        val punctuationSpacingCompression = punctuationSpacingCompressor.compress(punctuationAtoms)
-        val clusters = naturalClusters.withPunctuationSpacingCompression(punctuationSpacingCompression)
+        val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -136,8 +144,8 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val naturalAdvance = naturalClusters.sumOf { it.advance.toDouble() }.toFloat()
-        val adjustedAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
+        val naturalAdvance = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val adjustedAdvance = (naturalAdvance - spacingPlan.totalReduction).coerceAtLeast(0f)
         val resultWidth = adjustedAdvance.coerceAtMost(input.constraints.maxWidth)
         val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
         val lines = if (text.isEmpty()) {
@@ -157,7 +165,7 @@ class ExplainableStubParagraphLayoutEngine(
                         notes = listOf(
                             "ExplainableStubParagraphLayoutEngine emits one unoptimized line.",
                             "punctuation-atoms:${punctuationAtoms.size}",
-                            "punctuation-spacing-reduction:${punctuationSpacingCompression.totalReduction}",
+                            "punctuation-spacing-reduction:${spacingPlan.totalReduction}",
                         ),
                     ),
                 )
@@ -177,31 +185,98 @@ class ExplainableStubParagraphLayoutEngine(
                 fontDecisions = fontDecisions.map { decision ->
                     val clusterText = text.substring(decision.range.start, decision.range.end)
                     val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
-                    "font:${decision.range.start}-${decision.range.end}:$clusterText->${substitution.displayText}:${decision.role}:${decision.candidate.key}:${decision.reason}:${substitution.reason}"
+                    FontDecisionInfo(
+                        range = decision.range,
+                        sourceText = clusterText,
+                        displayText = substitution.displayText,
+                        role = decision.role.name,
+                        fontKey = decision.candidate.key,
+                        reason = decision.reason,
+                        substitutionReason = substitution.reason,
+                    )
                 },
                 metricDecisions = metricDecisions.map { decision ->
-                    "metrics:${decision.range.start}-${decision.range.end}:${decision.sourceText}:${decision.request.role}:${decision.request.fontKey}:" +
-                        "raw(a=${decision.rawMetrics.ascent},d=${decision.rawMetrics.descent},l=${decision.rawMetrics.leading},source=${decision.rawMetrics.source})->" +
-                        "layout(a=${decision.layoutMetrics.ascent},d=${decision.layoutMetrics.descent},baseline=${decision.layoutMetrics.baselineClass},box=${decision.layoutMetrics.metricBox},source=${decision.layoutMetrics.source}):" +
-                        decision.layoutMetrics.reason
+                    MetricDecisionInfo(
+                        range = decision.range,
+                        sourceText = decision.sourceText,
+                        role = decision.request.role.name,
+                        fontKey = decision.request.fontKey,
+                        rawAscent = decision.rawMetrics.ascent,
+                        rawDescent = decision.rawMetrics.descent,
+                        rawLeading = decision.rawMetrics.leading,
+                        rawSource = decision.rawMetrics.source.name,
+                        layoutAscent = decision.layoutMetrics.ascent,
+                        layoutDescent = decision.layoutMetrics.descent,
+                        baselineClass = decision.layoutMetrics.baselineClass.name,
+                        metricBox = decision.layoutMetrics.metricBox.name,
+                        layoutSource = decision.layoutMetrics.source.name,
+                        reason = decision.layoutMetrics.reason,
+                    )
                 },
                 punctuationDecisions = punctuationAtoms.map { atom ->
-                    "punct:${atom.range.start}-${atom.range.end}:${atom.char}:${atom.punctuationClass}:" +
-                        "advance=${atom.advance},body=${atom.bodyWidth}," +
-                        "leading=${atom.leadingGlue.natural},trailing=${atom.trailingGlue.natural},anchor=${atom.anchor}"
+                    PunctuationDecisionInfo(
+                        range = atom.range,
+                        char = atom.char,
+                        punctuationClass = atom.punctuationClass.name,
+                        advance = atom.advance,
+                        bodyWidth = atom.bodyWidth,
+                        leadingGlueNatural = atom.leadingGlue.natural,
+                        trailingGlueNatural = atom.trailingGlue.natural,
+                        anchor = atom.anchor.name,
+                    )
                 },
-                punctuationSpacingDecisions = punctuationSpacingCompression.adjustments.map { adjustment ->
-                    "spacing:${adjustment.range.start}-${adjustment.range.end}:${adjustment.leftChar}${adjustment.rightChar}:" +
-                        "naturalInner=${adjustment.naturalInnerGlue},adjustedInner=${adjustment.adjustedInnerGlue}," +
-                        "reduction=${adjustment.reduction},target=${adjustment.reductionTargetRange.start}-${adjustment.reductionTargetRange.end}:" +
-                        adjustment.reason
+                spacingDecisions = spacingPlan.adjustments.map { adjustment ->
+                    SpacingDecisionInfo(
+                        range = adjustment.range,
+                        leftChar = adjustment.leftChar,
+                        rightChar = adjustment.rightChar,
+                        naturalInnerGlue = adjustment.naturalInnerGlue,
+                        adjustedInnerGlue = adjustment.adjustedInnerGlue,
+                        reduction = adjustment.reduction,
+                        reductionTargetRange = adjustment.reductionTargetRange,
+                        reason = adjustment.reason,
+                    )
                 },
-                lineDecisions = listOf("line:single-placeholder"),
+                roleOverrides = roleOverrideInfos,
+                lineDecisions = lines.map { line ->
+                    LineDecisionInfo(
+                        range = line.range,
+                        kind = "single-placeholder",
+                        notes = line.debug.notes,
+                    )
+                },
             ),
         )
     }
 
-    private fun clusterRanges(text: String, classifier: FontRoleClassifier): List<TextRange> {
+    private fun Map<Int, FontRole>.toRoleOverrideInfos(
+        text: String,
+        baseClassifier: FontRoleClassifier,
+        context: FontRoleContext,
+    ): List<RoleOverrideInfo> =
+        entries
+            .sortedBy { it.key }
+            .map { (index, overriddenRole) ->
+                val sourceText = text.substring(index, (index + 1).coerceAtMost(text.length))
+                val originalRole = baseClassifier
+                    .classify(text, TextRange(index, index + 1), context)
+                RoleOverrideInfo(
+                    range = TextRange(index, index + 1),
+                    sourceText = sourceText,
+                    originalRole = originalRole.name,
+                    overriddenRole = overriddenRole.name,
+                    source = "QuotePairAwareLatinContext",
+                    reason = "quote-pair-outer-context",
+                )
+            }
+
+    private fun clusterRanges(
+        text: String,
+        classifier: FontRoleClassifier,
+        context: FontRoleContext,
+        profile: ClreqProfile,
+    ): List<TextRange> {
+        val coalesceSet = profile.coalesceRepeatablePunctuation
         val ranges = mutableListOf<TextRange>()
         var index = 0
         while (index < text.length) {
@@ -209,7 +284,7 @@ class ExplainableStubParagraphLayoutEngine(
             val charCount = codePoint.charCount()
             val start = index
             val firstRange = TextRange(start, start + charCount)
-            val role = classifier.classify(text, firstRange)
+            val role = classifier.classify(text, firstRange, context)
 
             index += charCount
             if (role == FontRole.LatinText) {
@@ -217,10 +292,10 @@ class ExplainableStubParagraphLayoutEngine(
                     val nextCodePoint = text.codePointAtCompat(index)
                     val nextCharCount = nextCodePoint.charCount()
                     val nextRange = TextRange(index, index + nextCharCount)
-                    if (classifier.classify(text, nextRange) != FontRole.LatinText) break
+                    if (classifier.classify(text, nextRange, context) != FontRole.LatinText) break
                     index += nextCharCount
                 }
-            } else if (role == FontRole.CjkPunctuation && codePoint.isRepeatableCjkPunctuation()) {
+            } else if (role == FontRole.CjkPunctuation && codePoint in coalesceSet) {
                 while (index < text.length) {
                     val nextCodePoint = text.codePointAtCompat(index)
                     if (nextCodePoint != codePoint) break
@@ -232,9 +307,6 @@ class ExplainableStubParagraphLayoutEngine(
         }
         return ranges
     }
-
-    private fun Int.isRepeatableCjkPunctuation(): Boolean =
-        this == 0x2014 || this == 0x2026 || this == 0x22EF
 
     private fun String.codePointAtCompat(index: Int): Int {
         val high = this[index].code
@@ -270,27 +342,6 @@ class ExplainableStubParagraphLayoutEngine(
         } else {
             range
         }
-
-    private fun List<Cluster>.withPunctuationSpacingCompression(
-        compression: PunctuationSpacingCompressionResult,
-    ): List<Cluster> {
-        if (compression.adjustments.isEmpty()) return this
-
-        return map { cluster ->
-            val reduction = compression.adjustments
-                .filter { adjustment -> adjustment.reductionTargetRange.isInside(cluster.range) }
-                .sumOf { it.reduction.toDouble() }
-                .toFloat()
-            if (reduction == 0f) {
-                cluster
-            } else {
-                cluster.copy(advance = (cluster.advance - reduction).coerceAtLeast(0f))
-            }
-        }
-    }
-
-    private fun TextRange.isInside(other: TextRange): Boolean =
-        start >= other.start && end <= other.end
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {

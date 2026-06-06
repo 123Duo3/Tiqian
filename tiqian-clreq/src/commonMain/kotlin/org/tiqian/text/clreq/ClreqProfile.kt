@@ -14,8 +14,19 @@ data class ClreqProfile(
     val strictness: ClreqStrictness,
     val region: ClreqRegion,
     val punctuationGlyphPolicy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
+    val coalesceRepeatablePunctuation: Set<Int> = DefaultCoalesceRepeatablePunctuation,
 ) {
     companion object {
+        // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
+        // repeats, form a single semantic punctuation cluster (CLREQ two-em dash and
+        // ellipsis). Listed in profile so region overrides do not require engine code
+        // changes. Must precede MainlandHorizontal so its constructor default resolves.
+        val DefaultCoalesceRepeatablePunctuation: Set<Int> = setOf(
+            0x2014,
+            0x2026,
+            0x22EF,
+        )
+
         val MainlandHorizontal = ClreqProfile(
             id = "clreq-mainland-horizontal",
             strictness = ClreqStrictness.Normal,

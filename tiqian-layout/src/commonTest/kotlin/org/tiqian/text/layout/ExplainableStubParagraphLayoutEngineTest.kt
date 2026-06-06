@@ -23,7 +23,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         assertEquals(2, result.clusters.size)
         assertEquals(1, result.lines.size)
-        assertTrue(result.debug.lineDecisions.contains("line:single-placeholder"))
+        assertEquals("single-placeholder", result.debug.lineDecisions.single().kind)
     }
 
     @Test
@@ -37,16 +37,26 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         assertTrue(
             result.debug.fontDecisions.any {
-                it.contains("……->⋯⋯") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary")
+                it.sourceText == "……" &&
+                    it.displayText == "⋯⋯" &&
+                    it.role == FontRole.CjkPunctuation.name &&
+                    it.fontKey == "cjk-primary"
             },
         )
         assertTrue(
             result.debug.fontDecisions.any {
-                it.contains("——->⸺") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary")
+                it.sourceText == "——" &&
+                    it.displayText == "⸺" &&
+                    it.role == FontRole.CjkPunctuation.name &&
+                    it.fontKey == "cjk-primary"
             },
         )
         assertTrue(
-            result.debug.fontDecisions.any { it.contains("English") && it.contains(FontRole.LatinText.name) && it.contains("latin-primary") },
+            result.debug.fontDecisions.any {
+                it.sourceText == "English" &&
+                    it.role == FontRole.LatinText.name &&
+                    it.fontKey == "latin-primary"
+            },
         )
         assertEquals("English", result.clusters.first { it.text == "English" }.text)
     }
@@ -101,6 +111,30 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun coalesceSetIsDrivenByProfile() {
+        // Profile with empty coalesce set should split "——" into two clusters of "—"
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    punctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreserveInput,
+                    coalesceRepeatablePunctuation = emptySet(),
+                )
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("——"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals(2, result.clusters.size)
+        assertEquals("—", result.clusters[0].text)
+        assertEquals("—", result.clusters[1].text)
+    }
+
+    @Test
     fun usesTwoEmAdvanceForRecommendedDashCodepoint() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
@@ -130,18 +164,18 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun keepsTextStartLatinQuotePairInLatinRun() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("\u201CHello\u201D world"),
+                content = TiqianTextContent("“Hello” world"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
 
         val quoted = result.clusters.first()
 
-        assertEquals("\u201CHello\u201D", quoted.text)
+        assertEquals("“Hello”", quoted.text)
         assertEquals("latin-primary", quoted.fontKey)
         assertTrue(
             result.debug.fontDecisions.any {
-                it.contains("\u201CHello\u201D") && it.contains(FontRole.LatinText.name)
+                it.sourceText == "“Hello”" && it.role == FontRole.LatinText.name
             },
         )
     }
@@ -150,14 +184,34 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun skipsNeutralDashBeforeLatinQuotePairInLayout() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("English \u2014 \u201Chello\u201D"),
+                content = TiqianTextContent("English — “hello”"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
 
-        val quoted = result.clusters.first { it.text == "\u201Chello\u201D" }
+        val quoted = result.clusters.first { it.text == "“hello”" }
 
         assertEquals("latin-primary", quoted.fontKey)
+    }
+
+    @Test
+    fun recordsRoleOverridesForResolvedQuotePairs() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("“Hello” world"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        // QuotePair resolves both quotes to LatinText. Without the override the
+        // standalone classifier would label "“" at position 0 as CjkPunctuation
+        // (text boundary, no Latin context).
+        val openQuoteOverride = result.debug.roleOverrides.firstOrNull { it.range.start == 0 }
+        val closeQuoteOverride = result.debug.roleOverrides.firstOrNull { it.range.start == 6 }
+        assertEquals("LatinText", openQuoteOverride?.overriddenRole)
+        assertEquals("CjkPunctuation", openQuoteOverride?.originalRole)
+        assertEquals("QuotePairAwareLatinContext", openQuoteOverride?.source)
+        assertEquals("LatinText", closeQuoteOverride?.overriddenRole)
     }
 
     @Test
@@ -178,26 +232,31 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        assertTrue(
-            result.debug.punctuationDecisions.any {
-                it == "punct:2-3:，:PauseOrStop:advance=16.0,body=8.0,leading=4.0,trailing=4.0,anchor=Center"
-            },
-        )
-        assertTrue(
-            result.debug.punctuationDecisions.any {
-                it == "punct:5-6:。:PauseOrStop:advance=16.0,body=8.0,leading=4.0,trailing=4.0,anchor=Center"
-            },
-        )
-        assertTrue(
-            result.debug.punctuationDecisions.any {
-                it == "punct:6-8:⸺:Dash:advance=32.0,body=32.0,leading=0.0,trailing=0.0,anchor=Center"
-            },
-        )
+        val comma = result.debug.punctuationDecisions.single { it.char == '，' }
+        assertEquals(2, comma.range.start)
+        assertEquals(3, comma.range.end)
+        assertEquals("PauseOrStop", comma.punctuationClass)
+        assertEquals(16f, comma.advance)
+        assertEquals(8f, comma.bodyWidth)
+        assertEquals(4f, comma.leadingGlueNatural)
+        assertEquals(4f, comma.trailingGlueNatural)
+        assertEquals("Center", comma.anchor)
+
+        val stop = result.debug.punctuationDecisions.single { it.char == '。' }
+        assertEquals(5, stop.range.start)
+        assertEquals(6, stop.range.end)
+
+        val dash = result.debug.punctuationDecisions.single { it.char == '⸺' }
+        assertEquals(6, dash.range.start)
+        assertEquals(8, dash.range.end)
+        assertEquals("Dash", dash.punctuationClass)
+        assertEquals(32f, dash.advance)
+
         assertTrue(result.lines.single().debug.notes.contains("punctuation-atoms:3"))
     }
 
     @Test
-    fun compressesAdjacentPunctuationInnerGlue() {
+    fun compressesAdjacentPunctuationViaPlanWithoutMutatingClusterAdvance() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("你好，。"),
@@ -212,13 +271,22 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(60f, line.adjustedWidth)
         assertEquals(60f, line.visualWidth)
         assertEquals(60f, result.size.width)
-        assertEquals(12f, stop.advance)
+        // Cluster advance stays at natural value; reduction is captured by the
+        // spacing plan so the justifier in a later slice can re-allocate glue.
+        assertEquals(16f, stop.advance)
         assertTrue(line.debug.notes.contains("punctuation-spacing-reduction:4.0"))
-        assertTrue(
-            result.debug.punctuationSpacingDecisions.any {
-                it == "spacing:2-4:，。:naturalInner=8.0,adjustedInner=4.0,reduction=4.0,target=3-4:collapse-adjacent-punctuation-inner-glue"
-            },
-        )
+
+        val spacing = result.debug.spacingDecisions.single()
+        assertEquals(2, spacing.range.start)
+        assertEquals(4, spacing.range.end)
+        assertEquals('，', spacing.leftChar)
+        assertEquals('。', spacing.rightChar)
+        assertEquals(8f, spacing.naturalInnerGlue)
+        assertEquals(4f, spacing.adjustedInnerGlue)
+        assertEquals(4f, spacing.reduction)
+        assertEquals(3, spacing.reductionTargetRange.start)
+        assertEquals(4, spacing.reductionTargetRange.end)
+        assertEquals("collapse-adjacent-punctuation-inner-glue", spacing.reason)
     }
 
     @Test
@@ -233,14 +301,11 @@ class ExplainableStubParagraphLayoutEngineTest {
         val line = result.lines.single()
         assertEquals(8f, line.baseline)
         assertEquals(16f, line.bottom)
-        assertTrue(
-            result.debug.metricDecisions.any {
-                it.contains("CjkText") &&
-                    it.contains("raw(a=18.4") &&
-                    it.contains("layout(a=8.0,d=8.0") &&
-                    it.contains("baseline=IdeographicCentered") &&
-                    it.contains("box=IdeographicEmBox")
-            },
-        )
+        val cjk = result.debug.metricDecisions.first { it.role == "CjkText" }
+        assertEquals(18.4f, cjk.rawAscent)
+        assertEquals(8f, cjk.layoutAscent)
+        assertEquals(8f, cjk.layoutDescent)
+        assertEquals("IdeographicCentered", cjk.baselineClass)
+        assertEquals("IdeographicEmBox", cjk.metricBox)
     }
 }

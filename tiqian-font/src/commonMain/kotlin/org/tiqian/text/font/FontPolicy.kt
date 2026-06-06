@@ -35,12 +35,21 @@ interface FallbackResolver {
     fun resolve(text: String, range: TextRange, request: FontRequest): FontDecision
 }
 
+data class FontRoleContext(
+    val locale: String = "zh-Hans",
+    val regionHint: String? = null,
+)
+
 interface FontRoleClassifier {
-    fun classify(text: String, range: TextRange): FontRole
+    fun classify(
+        text: String,
+        range: TextRange,
+        context: FontRoleContext = FontRoleContext(),
+    ): FontRole
 }
 
 class CjkFontRoleClassifier : FontRoleClassifier {
-    override fun classify(text: String, range: TextRange): FontRole {
+    override fun classify(text: String, range: TextRange, context: FontRoleContext): FontRole {
         val firstCodePoint = text.codePointAtCompat(range.start)
         return when {
             firstCodePoint.isCjkCodePoint() -> FontRole.CjkText
