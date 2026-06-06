@@ -29,6 +29,11 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 180f),
             notes = "Covers opening/closing punctuation and repair planning.",
         ),
+        LayoutFixture(
+            id = "fallback-roles",
+            text = "提椠……Hello——世界。",
+            constraints = LayoutConstraints(maxWidth = 240f),
+            notes = "Covers cluster font role classification for CJK text, CJK punctuation, and Latin words.",
+        ),
     )
 }
-
