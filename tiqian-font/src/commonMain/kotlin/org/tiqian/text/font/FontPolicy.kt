@@ -44,6 +44,7 @@ class CjkFontRoleClassifier : FontRoleClassifier {
         val firstCodePoint = text.codePointAtCompat(range.start)
         return when {
             firstCodePoint.isCjkCodePoint() -> FontRole.CjkText
+            firstCodePoint.isLatinTechnicalPunctuation(text, range) -> FontRole.LatinText
             firstCodePoint.isCjkPunctuationCodePoint() -> FontRole.CjkPunctuation
             firstCodePoint.isLatinCodePoint() -> FontRole.LatinText
             firstCodePoint.isEmojiCodePoint() -> FontRole.Emoji
@@ -93,6 +94,19 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this == 0xFF09 ||
             this == 0xFF5E
 
+    private fun Int.isLatinTechnicalPunctuation(text: String, range: TextRange): Boolean =
+        isAmbiguousAsciiPunctuation() &&
+            (
+                text.previousCodePointBefore(range.start)?.isLatinTechnicalRunCodePoint() == true ||
+                    text.nextCodePointAfter(range.end)?.isLatinTechnicalRunCodePoint() == true
+                )
+
+    private fun Int.isAmbiguousAsciiPunctuation(): Boolean =
+        this == 0x002D || this == 0x002F || this == 0x007E
+
+    private fun Int.isLatinTechnicalRunCodePoint(): Boolean =
+        isLatinCodePoint() || isAmbiguousAsciiPunctuation() || this == 0x002E || this == 0x003A || this == 0x005F
+
     private fun Int.isLatinCodePoint(): Boolean =
         this in 0x0041..0x005A ||
             this in 0x0061..0x007A ||
@@ -122,6 +136,20 @@ class CjkFontRoleClassifier : FontRoleClassifier {
 
     private fun Int.toCharOrNull(): Char? =
         if (this in 0..0xFFFF) this.toChar() else null
+
+    private fun String.previousCodePointBefore(index: Int): Int? {
+        if (index <= 0) return null
+        val low = this[index - 1].code
+        if (low !in 0xDC00..0xDFFF || index - 2 < 0) return low
+
+        val high = this[index - 2].code
+        if (high !in 0xD800..0xDBFF) return low
+
+        return 0x10000 + ((high - 0xD800) shl 10) + (low - 0xDC00)
+    }
+
+    private fun String.nextCodePointAfter(index: Int): Int? =
+        if (index >= length) null else codePointAtCompat(index)
 }
 
 class PreferCjkForAmbiguousPunctuationResolver(

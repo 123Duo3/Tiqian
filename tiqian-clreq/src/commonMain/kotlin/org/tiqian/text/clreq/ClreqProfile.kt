@@ -1,5 +1,8 @@
 package org.tiqian.text.clreq
 
+import org.tiqian.text.core.BuiltInLayoutProfiles
+import org.tiqian.text.core.LayoutProfileId
+
 enum class ClreqStrictness {
     Loose,
     Normal,
@@ -28,6 +31,21 @@ enum class ClreqRegion {
     Custom,
 }
 
+fun interface ClreqProfileResolver {
+    fun resolve(profileId: LayoutProfileId): ClreqProfile
+}
+
+object BuiltInClreqProfileResolver : ClreqProfileResolver {
+    override fun resolve(profileId: LayoutProfileId): ClreqProfile =
+        when (profileId.value) {
+            BuiltInLayoutProfiles.ClreqHorizontal.value,
+            ClreqProfile.MainlandHorizontal.id,
+            -> ClreqProfile.MainlandHorizontal
+
+            else -> ClreqProfile.MainlandHorizontal
+        }
+}
+
 enum class CjkPunctuationGlyphPolicy {
     PreserveInput,
     PreferClreqRecommendedCodepoints,
@@ -53,6 +71,7 @@ data class PunctuationPolicy(
     val allowAtLineStart: Boolean,
     val allowAtLineEnd: Boolean,
     val defaultBodyEm: Float,
+    val defaultAdvanceEm: Float = 1f,
 )
 
 object ClreqPunctuationPolicies {
@@ -76,26 +95,58 @@ object ClreqPunctuationPolicies {
             punctuationClass = punctuationClass,
             allowAtLineStart = punctuationClass == PunctuationClass.Opening || punctuationClass == PunctuationClass.Other,
             allowAtLineEnd = punctuationClass != PunctuationClass.Opening,
-            defaultBodyEm = when (punctuationClass) {
-                PunctuationClass.PauseOrStop,
-                PunctuationClass.Closing,
-                PunctuationClass.Opening,
-                -> 0.5f
-
-                PunctuationClass.Ellipsis,
-                PunctuationClass.Dash,
-                -> 1.0f
-
-                PunctuationClass.MiddleDot,
-                PunctuationClass.Interpunct,
-                PunctuationClass.Connector,
-                PunctuationClass.Solidus,
-                PunctuationClass.Quote,
-                PunctuationClass.Other,
-                -> 1.0f
-            },
+            defaultBodyEm = char.defaultPunctuationBodyEm(punctuationClass),
+            defaultAdvanceEm = char.defaultPunctuationAdvanceEm(punctuationClass),
         )
     }
+
+    private fun Char.defaultPunctuationBodyEm(punctuationClass: PunctuationClass): Float =
+        when {
+            this == '⸺' -> 2.0f
+            punctuationClass == PunctuationClass.PauseOrStop -> 0.5f
+            punctuationClass == PunctuationClass.Closing -> 0.5f
+            punctuationClass == PunctuationClass.Opening -> 0.5f
+            else -> 1.0f
+        }
+
+    private fun Char.defaultPunctuationAdvanceEm(punctuationClass: PunctuationClass): Float =
+        when {
+            this == '⸺' -> 2.0f
+            punctuationClass == PunctuationClass.Other -> 1.0f
+            else -> 1.0f
+        }
+}
+
+object ClreqPunctuationAdvancePolicy {
+    fun advanceEm(sourceText: String, displayText: String): Float =
+        when {
+            displayText == "⸺" -> 2.0f
+            sourceText == "⸺" -> 2.0f
+            else -> sourceText.codePointCount().toFloat()
+        }
+
+    private fun String.codePointCount(): Int {
+        var count = 0
+        var index = 0
+        while (index < length) {
+            index += codePointAtCompat(index).charCount()
+            count += 1
+        }
+        return count
+    }
+
+    private fun String.codePointAtCompat(index: Int): Int {
+        val high = this[index].code
+        if (high !in 0xD800..0xDBFF || index + 1 >= length) return high
+
+        val low = this[index + 1].code
+        if (low !in 0xDC00..0xDFFF) return high
+
+        return 0x10000 + ((high - 0xD800) shl 10) + (low - 0xDC00)
+    }
+
+    private fun Int.charCount(): Int =
+        if (this > 0xFFFF) 2 else 1
 }
 
 data class CjkPunctuationGlyphSubstitution(

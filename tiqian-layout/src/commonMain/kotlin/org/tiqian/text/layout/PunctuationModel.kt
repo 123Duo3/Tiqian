@@ -56,14 +56,15 @@ class PunctuationAtomBuilder {
         val policy = ClreqPunctuationPolicies.policyFor(char)
         if (policy.punctuationClass == PunctuationClass.Other) return null
 
+        val advance = policy.defaultAdvanceEm * em
         val bodyWidth = policy.defaultBodyEm * em
-        val sideGlue = ((em - bodyWidth) / 2f).coerceAtLeast(0f)
+        val sideGlue = ((advance - bodyWidth) / 2f).coerceAtLeast(0f)
 
         return PunctuationAtom(
             range = TextRange(index, index + 1),
             char = char,
             punctuationClass = policy.punctuationClass,
-            advance = em,
+            advance = advance,
             inkBounds = null,
             bodyWidth = bodyWidth,
             leadingGlue = Glue(
@@ -86,4 +87,3 @@ class PunctuationAtomBuilder {
         )
     }
 }
-

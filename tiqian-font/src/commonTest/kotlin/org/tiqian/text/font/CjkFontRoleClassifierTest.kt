@@ -31,4 +31,12 @@ class CjkFontRoleClassifierTest {
     fun classifiesLatinText() {
         assertEquals(FontRole.LatinText, classifier.classify("English", TextRange(0, 1)))
     }
+
+    @Test
+    fun keepsAsciiPunctuationInsideLatinTechnicalRuns() {
+        assertEquals(FontRole.LatinText, classifier.classify("well-known", TextRange(4, 5)))
+        assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(6, 7)))
+        assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(7, 8)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("中文/中文", TextRange(2, 3)))
+    }
 }

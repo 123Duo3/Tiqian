@@ -40,4 +40,12 @@ class ClreqPunctuationGlyphSubstitutorTest {
         assertEquals("／", substitutor.substitute("／").displayText)
         assertEquals("．", substitutor.substitute("．").displayText)
     }
+
+    @Test
+    fun recommendedDashCodepointOccupiesTwoEm() {
+        assertEquals(2.0f, ClreqPunctuationPolicies.policyFor('⸺').defaultBodyEm)
+        assertEquals(2.0f, ClreqPunctuationPolicies.policyFor('⸺').defaultAdvanceEm)
+        assertEquals(2.0f, ClreqPunctuationAdvancePolicy.advanceEm(sourceText = "⸺", displayText = "⸺"))
+        assertEquals(2.0f, ClreqPunctuationAdvancePolicy.advanceEm(sourceText = "——", displayText = "⸺"))
+    }
 }

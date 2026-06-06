@@ -1,5 +1,8 @@
 package org.tiqian.text.layout
 
+import org.tiqian.text.clreq.CjkPunctuationGlyphPolicy
+import org.tiqian.text.clreq.ClreqProfile
+import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.core.LayoutConstraints
 import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.TiqianTextContent
@@ -74,6 +77,62 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals("cjk-primary", dash.fontKey)
         assertEquals("cjk-primary", interpunct.fontKey)
         assertEquals("cjk-primary", solidus.fontKey)
+    }
+
+    @Test
+    fun honorsProfilePunctuationGlyphPolicy() {
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    punctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreserveInput,
+                )
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("……——"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("……", result.clusters.first { it.text == "……" }.displayText)
+        assertEquals("——", result.clusters.first { it.text == "——" }.displayText)
+    }
+
+    @Test
+    fun usesTwoEmAdvanceForRecommendedDashCodepoint() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("⸺"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals(32f, result.clusters.single().advance)
+        assertEquals(32f, result.size.width)
+    }
+
+    @Test
+    fun keepsLatinTechnicalPunctuationInLatinRun() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("well-known/path"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("well-known/path", result.clusters.single().text)
+        assertEquals("latin-primary", result.clusters.single().fontKey)
+    }
+
+    @Test
+    fun buildsTwoEmPunctuationAtomForRecommendedDashCodepoint() {
+        val atom = PunctuationAtomBuilder().build("⸺", index = 0, em = 16f)
+
+        requireNotNull(atom)
+        assertEquals(32f, atom.advance)
+        assertEquals(32f, atom.bodyWidth)
     }
 
     @Test

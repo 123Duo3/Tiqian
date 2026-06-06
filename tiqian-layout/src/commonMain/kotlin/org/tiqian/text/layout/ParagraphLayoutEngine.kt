@@ -1,6 +1,9 @@
 package org.tiqian.text.layout
 
+import org.tiqian.text.clreq.BuiltInClreqProfileResolver
+import org.tiqian.text.clreq.ClreqPunctuationAdvancePolicy
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
+import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
@@ -33,7 +36,7 @@ interface ParagraphLayoutEngine {
 class ExplainableStubParagraphLayoutEngine(
     private val fontRoleClassifier: FontRoleClassifier = CjkFontRoleClassifier(),
     private val fallbackResolver: FallbackResolver = PreferCjkForAmbiguousPunctuationResolver(),
-    private val punctuationGlyphSubstitutor: ClreqPunctuationGlyphSubstitutor = ClreqPunctuationGlyphSubstitutor(),
+    private val clreqProfileResolver: ClreqProfileResolver = BuiltInClreqProfileResolver,
     private val fontMetricsResolver: FontMetricsResolver = StubFontMetricsResolver(),
     private val fontMetricsNormalizer: FontMetricsNormalizer = ScriptAwareFontMetricsNormalizer(),
 ) : ParagraphLayoutEngine {
@@ -41,6 +44,10 @@ class ExplainableStubParagraphLayoutEngine(
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
         val advance = fontSize
+        val clreqProfile = clreqProfileResolver.resolve(input.profileId)
+        val punctuationGlyphSubstitutor = ClreqPunctuationGlyphSubstitutor(
+            policy = clreqProfile.punctuationGlyphPolicy,
+        )
 
         val clusterRanges = clusterRanges(text)
         val fontDecisions = clusterRanges.map { range ->
@@ -64,7 +71,10 @@ class ExplainableStubParagraphLayoutEngine(
                 text = sourceText,
                 displayText = substitution.displayText,
                 fontKey = decision.candidate.key,
-                advance = advance * sourceText.layoutAdvanceEmCount(substitution.displayText),
+                advance = advance * ClreqPunctuationAdvancePolicy.advanceEm(
+                    sourceText = sourceText,
+                    displayText = substitution.displayText,
+                ),
             )
         }
 
@@ -187,15 +197,6 @@ class ExplainableStubParagraphLayoutEngine(
         return ranges
     }
 
-    private fun String.codePointCount(): Int =
-        codePointCountCompat(0, length)
-
-    private fun String.layoutAdvanceEmCount(displayText: String): Int =
-        when {
-            this == "——" && displayText == "⸺" -> 2
-            else -> codePointCount()
-        }
-
     private fun Int.isRepeatableCjkPunctuation(): Boolean =
         this == 0x2014 || this == 0x2026 || this == 0x22EF
 
@@ -207,16 +208,6 @@ class ExplainableStubParagraphLayoutEngine(
         if (low !in 0xDC00..0xDFFF) return high
 
         return 0x10000 + ((high - 0xD800) shl 10) + (low - 0xDC00)
-    }
-
-    private fun String.codePointCountCompat(start: Int, end: Int): Int {
-        var count = 0
-        var index = start
-        while (index < end) {
-            index += codePointAtCompat(index).charCount()
-            count += 1
-        }
-        return count
     }
 
     private fun Int.charCount(): Int =
