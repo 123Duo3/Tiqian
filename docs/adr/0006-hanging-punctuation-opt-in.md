@@ -75,3 +75,15 @@ data class ClreqProfile(
 - Slice 4b 收尾时实现 PushIn（不实现 Hang）。
 - Slice 4b 收尾的 ADR 应说明 PushIn 如何借用 Slice 5 的 `SpacingPlan` 容量。
 - Hang 的真实实现单列后续 ADR（待办），包含：白名单字符集、与 justifier 的协调、与 line-end 半角的关系、关闭行尾对齐 (`textAlign != Justify`) 时的语义。
+
+## 当前 PushIn 实现的已知简化
+
+Slice 4b 收尾 (`feat: add punctuation glue push-in repair`, `feat: structure line repair decisions`) 已经把 PushIn 接进默认 kinsoku 修复链。落地实现有两处**已知**的简化，不影响正确性但需要后续 ADR 跟进：
+
+1. **Capacity 与 spacing compression 的潜在双账。** `pushInCapacities` 来自 `atom.trailingGlue.natural - atom.trailingGlue.min`（[ParagraphLayoutEngine.kt:477](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/text/layout/ParagraphLayoutEngine.kt) 的 `pushInCapacities()`），目前 `PunctuationAtomBuilder` 给所有标点的 `leadingGlue.min = trailingGlue.min = 0`，所以 capacity 等于完整 sideGlue。但 `PunctuationSpacingCompressor` 已经因为相邻标点把某条 trailing glue 用掉一部分时，PushIn 再借同一条 trailing glue 就会算两次。当前 fixture 不触发这个组合（相邻挤压发生在行内，PushIn 发生在跨行），但语义上是漏洞。
+   - 修复方向：从 `SpacingPlan` 反推「已消费的 glue 量」，得 `effectiveTrailingGlueCapacity = (natural - min) - consumedBySpacingPlan`。
+   - 或者在 `PunctuationAtomBuilder` 出 atom 时按 profile 设 `min > 0`，把强制保留量直接体现在 capacity 上。
+2. **PushIn 只挤 offender 自己的 trailing glue。** 孔雀文章里「通过挤压」其实是「在本行多处选取四分空」分摊调整。当前实现只查 `pushInCapacities[offenderIndex]`，不会去借同行其它标点的 leading/trailing 空间。这意味着当 offender 本身是非标点 cluster（理论上现在不会发生，因为只有 punctuation 才会触发 forbiddenAtLineStart），或单条 trailing glue 不够而多条合计够时，PushIn 会被错误拒绝，退回 CarryPrevious。
+   - 修复方向：让 `pushInCapacities` 输出整行可挤压资源的总和，并在 `tryPushIn` 内部按优先级（offender 自身 → 同行其它点号 trailing → leading）分配。
+
+两者都不影响当前 fixture 与测试的结果，但应作为 ADR 0006 / 0007 的 follow-up 在 Slice 6（shaping adapter）之后处理——因为真实 ink bounds 进来后 `atom.trailingGlue` 的 `min` / `max` 才有实际可调依据，单凭 stub 现在没法做出合理的容量上限。

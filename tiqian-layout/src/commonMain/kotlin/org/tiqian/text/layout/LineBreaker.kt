@@ -405,6 +405,22 @@ private data class PushInResult(
     val candidate: RepairCandidate,
 )
 
+/**
+ * Single-source contract:
+ *   `shrink` is the canonical amount of trailing glue this PushIn consumes.
+ *   - [RepairOption.PushIn.shrink] is the field of record (engine reads it to
+ *     subtract from the offender cluster's advance — see
+ *     `ParagraphLayoutEngine.pushInShrinkByCluster`).
+ *   - [LineCandidate.adjustedWidth] is recomputed here as
+ *     `expanded.adjustedWidth - shrink` to keep ADR 0005's drawable-cluster
+ *     invariant: the line candidate already reflects the post-shrink
+ *     geometry the breaker decided. The engine MUST NOT subtract `shrink`
+ *     from cluster advance and ALSO subtract it from `adjustedWidth` —
+ *     pick one consumer per derived field.
+ *   - Today `shrink == overflow`. If a future partial-PushIn lands
+ *     (`shrink < overflow`), update `shrink` here and rely on it as the
+ *     only knob; do not reintroduce a second `overflow`-based path.
+ */
 private fun tryPushIn(
     prev: LineCandidate,
     curr: LineCandidate,
@@ -438,6 +454,7 @@ private fun tryPushIn(
         )
     }
 
+    val shrink = overflow
     val offender = adjustedClusters[offenderIndex]
     val candidate = RepairCandidate(
         kind = "PushIn",
@@ -446,18 +463,18 @@ private fun tryPushIn(
         penalty = pushInPenalty,
         accepted = true,
         targetClusterIndex = offenderIndex,
-        shrink = overflow,
+        shrink = shrink,
         requiredShrink = overflow,
         availableCapacity = capacity,
     )
     val repairedPrevious = expanded.copy(
-        adjustedWidth = expanded.adjustedWidth - overflow,
+        adjustedWidth = expanded.adjustedWidth - shrink,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
-            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$overflow",
+            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink",
             offenderClusterIndex = offenderIndex,
             targetClusterIndex = offenderIndex,
-            shrink = overflow,
+            shrink = shrink,
             availableCapacity = capacity,
         ),
         repairCandidates = listOf(candidate),
