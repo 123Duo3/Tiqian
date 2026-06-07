@@ -17,6 +17,10 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+
+        jvmTest.dependencies {
+            implementation(project(":tiqian-shaping-jvm"))
+        }
     }
 }
 

@@ -147,6 +147,12 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
         g.color = Color.WHITE
         g.fillRect(0, 0, (canvasWidth + 1).toInt(), (canvasHeight + 1).toInt())
 
+        // Default autospace gap used by the engine when AutoSpacePolicy isn't
+        // surfaced per-cluster. Matches ClreqProfile defaults; if a future
+        // profile customises gapEm this rasterizer would over- or under-pad
+        // the boundary by the difference. Acceptable for the playground.
+        val defaultAutoSpaceGap = 0.25f * fontSize
+
         for (line in result.lines) {
             val lineClusters = result.clusters.filter {
                 it.range.start >= line.range.start && it.range.end <= line.range.end
@@ -160,10 +166,43 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                     else -> cjkFont
                 }
                 g.color = Color.BLACK
-                if (cluster.displayText.isNotEmpty()) {
-                    g.drawString(cluster.displayText, x, baselineY)
+
+                // For `text-autospace: replace`: REMOVE typed U+0020 from the
+                // rendered text at CJK boundaries, replace with the autospace
+                // gap. The engine reduces cluster.advance by what the shaped
+                // typed spaces contributed, but the residual cluster.advance
+                // doesn't perfectly track AWT's measured paint width — so we
+                // step x by the painted width + leading/trailing gaps rather
+                // than trust cluster.advance for stripped clusters. Engine
+                // model is still correct; this is a visual-only override.
+                val autoSpaces = result.debug.autoSpaceDecisions
+                    .filter { it.clusterRange == cluster.range }
+                val leadingStrip = autoSpaces.firstOrNull { it.side == "leading" }?.charactersAffected ?: 0
+                val trailingStrip = autoSpaces.firstOrNull { it.side == "trailing" }?.charactersAffected ?: 0
+                val leadingGap = if (leadingStrip > 0) defaultAutoSpaceGap else 0f
+                val trailingGap = if (trailingStrip > 0) defaultAutoSpaceGap else 0f
+                val paintText = cluster.displayText
+                    .drop(leadingStrip)
+                    .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
+
+                if (paintText.isNotEmpty()) {
+                    g.drawString(paintText, x + leadingGap, baselineY)
                 }
-                x += cluster.advance
+
+                if (leadingStrip > 0 || trailingStrip > 0) {
+                    // Override: render-time step = autospace gap + AWT-measured
+                    // paint width + autospace gap. Decouples from engine's
+                    // cluster.advance for this cluster, which already accounts
+                    // for shaped-space variance.
+                    val paintWidth = if (paintText.isNotEmpty()) {
+                        g.font.getStringBounds(paintText, g.fontRenderContext).width.toFloat()
+                    } else {
+                        0f
+                    }
+                    x += leadingGap + paintWidth + trailingGap
+                } else {
+                    x += cluster.advance
+                }
             }
         }
     } finally {
