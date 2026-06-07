@@ -135,6 +135,7 @@ class ExplainableStubParagraphLayoutEngine(
             fontDecisions = fontDecisions,
             policy = clreqProfile.autoSpace,
             fontSize = fontSize,
+            shapedGlyphsByClusterRange = shapedGlyphsByClusterRange,
         )
         val naturalClusters = autoSpaceResult.clusters
         val autoSpaceDecisions = autoSpaceResult.decisions
@@ -583,6 +584,7 @@ class ExplainableStubParagraphLayoutEngine(
         fontDecisions: List<FontDecision>,
         policy: AutoSpacePolicy,
         fontSize: Float,
+        shapedGlyphsByClusterRange: Map<TextRange, List<Glyph>>,
     ): AutoSpaceApplicationResult {
         if (isEmpty()) return AutoSpaceApplicationResult(emptyList(), emptyList())
 
@@ -599,12 +601,29 @@ class ExplainableStubParagraphLayoutEngine(
             val trailingSpaces = cluster.text.takeLastWhile { it == ' ' }.length
                 .let { count -> if (cluster.text.length == leadingSpaces) 0 else count }
 
+            // Use real shaped space advance when available so we don't
+            // over-shrink Latin clusters at CJK boundaries (AWT shapes
+            // U+0020 narrow, ~0.3em; stub shapes it 1em). Falls back to
+            // 1em per space if we can't find per-glyph data.
+            val glyphs = shapedGlyphsByClusterRange[cluster.range].orEmpty()
+            val leadingTypedAdvance = glyphs.boundarySpaceAdvance(
+                count = leadingSpaces,
+                side = "leading",
+                fallbackPerSpace = fontSize,
+            )
+            val trailingTypedAdvance = glyphs.boundarySpaceAdvance(
+                count = trailingSpaces,
+                side = "trailing",
+                fallbackPerSpace = fontSize,
+            )
+
             val leadingReduction = leadingSpaces.boundaryReduction(
                 boundaryRole = prevRole,
                 cluster = cluster,
                 side = "leading",
                 policy = policy,
                 fontSize = fontSize,
+                typedAdvance = leadingTypedAdvance,
                 decisions = decisions,
             )
             val trailingReduction = trailingSpaces.boundaryReduction(
@@ -613,6 +632,7 @@ class ExplainableStubParagraphLayoutEngine(
                 side = "trailing",
                 policy = policy,
                 fontSize = fontSize,
+                typedAdvance = trailingTypedAdvance,
                 decisions = decisions,
             )
             val totalReduction = leadingReduction + trailingReduction
@@ -626,17 +646,32 @@ class ExplainableStubParagraphLayoutEngine(
     }
 
     /**
+     * Sum of the leading or trailing `count` glyphs' advances. Used to read
+     * the real shaped width of typed U+0020 spaces — stub gives 1em per
+     * space; AWT often gives only ~0.3em. If the glyph list is missing or
+     * shorter than `count`, falls back to `count × fallbackPerSpace`.
+     */
+    private fun List<Glyph>.boundarySpaceAdvance(
+        count: Int,
+        side: String,
+        fallbackPerSpace: Float,
+    ): Float {
+        if (count <= 0) return 0f
+        if (size < count) return count * fallbackPerSpace
+        val slice = when (side) {
+            "leading" -> take(count)
+            else -> takeLast(count)
+        }
+        return slice.sumOf { it.advance.toDouble() }.toFloat()
+    }
+
+    /**
      * `TextAutoSpaceReplace` per CSS Text 4 + ADR 0009: a CJK ↔ Latin (or
      * Latin ↔ CJK) boundary needs ONE autospace gap, regardless of how many
-     * typed U+0020 the author placed at the boundary. Earlier implementation
-     * scaled the gap by the typed-space count, which violated the spec: two
-     * typed spaces should be folded into the same single autospace, not
-     * widen the boundary to `2 × gapEm`.
-     *
-     * Receiver `this` is the number of edge spaces in the Latin cluster on
-     * this side. Return value is the total advance reduction to apply to
-     * the Latin cluster: `count × spaceAdvance - 1 × autospaceGap`,
-     * floored at zero so 0-count is a no-op.
+     * typed U+0020 the author placed at the boundary. The typed advance is
+     * measured from the real shaped glyphs (see [boundarySpaceAdvance]), so
+     * when the shaper already gives narrow spaces (~0.3em in AWT) the
+     * reduction is small or zero rather than over-shrinking by `count × em`.
      */
     private fun Int.boundaryReduction(
         boundaryRole: FontRole?,
@@ -644,15 +679,13 @@ class ExplainableStubParagraphLayoutEngine(
         side: String,
         policy: AutoSpacePolicy,
         fontSize: Float,
+        typedAdvance: Float,
         decisions: MutableList<AutoSpaceDecisionInfo>,
     ): Float {
         if (this == 0 || boundaryRole == null) return 0f
         val mode = policy.modeFor(boundaryRole) ?: return 0f
         if (mode != AutoSpaceMode.Replace) return 0f
 
-        // Stub shaper assigns 1em per typed U+0020. The autospace replaces
-        // ALL of them (whether 1 or N) with a single gap of policy.gapEm × em.
-        val typedAdvance = this * fontSize
         val replacementGap = policy.gapEm * fontSize
         val total = (typedAdvance - replacementGap).coerceAtLeast(0f)
         if (total == 0f) return 0f
