@@ -53,7 +53,7 @@ PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
 ## Follow-up (Slice 3 收尾)
 
 - `inkBounds` 当前来自占位实现；接入真实 shaping 后用 glyph ink box 校正。
-- `pairRules` 已经在 `QuotePairAnalyzer` 覆盖引号，下一步覆盖括号对。
+- `pairRules`：`QuotePairAnalyzer` 覆盖弯引号、`BracketPairAnalyzer` 覆盖 ASCII `(...)` `[...]` `{...}`（[feat: bracket pair-aware ascii bracket classification](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/text/layout/BracketPairAnalyzer.kt)，默认 LatinText fallback、识别 CJK 外层时 override 为 CjkPunctuation）。后续可扩到 fullwidth 括号在 Latin 上下文反向 override（Latin run 包夹的 `（）` 应回退到 Latin 半角）。
 - `anchor = line-end / line-start` 在引擎实现 Slice 4 (kinsoku) 后才真正被使用；当前 dump 已暴露，先做记账。
 - 引号在嵌套场景（`他说：“你好‘世界’。”`) 的 pair 优先级需要 fixture。
 
