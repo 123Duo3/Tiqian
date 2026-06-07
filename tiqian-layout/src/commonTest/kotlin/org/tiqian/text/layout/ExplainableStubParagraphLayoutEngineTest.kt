@@ -206,10 +206,11 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun classifiesAsciiBracketsByOuterCjkContext() {
-        // 中文(English)中文 — without BracketPairAnalyzer, ( and ) would fall
-        // through to FontRole.Unknown and land on the symbol fallback font.
-        // With it, the pair inherits the CJK context from `文` on the left.
+    fun classifiesAsciiBracketsAsLatinRegardlessOfSurroundingContext() {
+        // ASCII parens/brackets do NOT share a code point with CJK fullwidth
+        // forms (（）「」 etc), so they are always Latin by typed intent.
+        // (English) joins the surrounding Latin run and renders in latin font;
+        // the CJK text on either side is unaffected.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文(English)中文"),
@@ -217,40 +218,30 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val openParen = result.clusters.single { it.text == "(" }
-        val closeParen = result.clusters.single { it.text == ")" }
-        assertEquals("cjk-primary", openParen.fontKey)
-        assertEquals("cjk-primary", closeParen.fontKey)
-        assertTrue(
-            result.debug.roleOverrides.any {
-                it.range.start == 2 &&
-                    it.source == "BracketPairAwareLatinContext" &&
-                    it.overriddenRole == "CjkPunctuation"
-            },
-        )
-        assertTrue(
-            result.debug.roleOverrides.any {
-                it.range.start == 10 &&
-                    it.source == "BracketPairAwareLatinContext" &&
-                    it.overriddenRole == "CjkPunctuation"
-            },
+        val latinCluster = result.clusters.single { it.text == "(English)" }
+        assertEquals("latin-primary", latinCluster.fontKey)
+        assertEquals(
+            "LatinText",
+            result.debug.fontDecisions.single { it.sourceText == "(English)" }.role,
         )
     }
 
     @Test
-    fun classifiesAsciiBracketsByOuterLatinContext() {
-        // he said (hello) — Latin both sides; brackets stay Latin.
+    fun classifiesAsciiBracketsAsLatinInsidePureCjkContent() {
+        // Even with CJK on both sides AND inside, ASCII brackets stay Latin —
+        // the author chose ASCII; if they wanted fullwidth they would type
+        // U+FF08/FF09 (which is already CjkPunctuation by code point).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("he said (hello) world"),
+                content = TiqianTextContent("中文(中文)"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
 
-        // ( and ) should be classified Latin and consumed into the surrounding
-        // Latin run by cluster aggregation.
-        val latinRun = result.clusters.single { it.text.contains("(hello)") }
-        assertEquals("latin-primary", latinRun.fontKey)
+        val openParen = result.clusters.single { it.text == "(" }
+        val closeParen = result.clusters.single { it.text == ")" }
+        assertEquals("latin-primary", openParen.fontKey)
+        assertEquals("latin-primary", closeParen.fontKey)
     }
 
     @Test

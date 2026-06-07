@@ -58,7 +58,6 @@ class ExplainableStubParagraphLayoutEngine(
     private val punctuationAtomBuilder: PunctuationAtomBuilder = PunctuationAtomBuilder(),
     private val punctuationSpacingCompressor: PunctuationSpacingCompressor = PunctuationSpacingCompressor(),
     private val quotePairAnalyzer: QuotePairAnalyzer = QuotePairAnalyzer(),
-    private val bracketPairAnalyzer: BracketPairAnalyzer = BracketPairAnalyzer(),
     private val lineBreaker: LineBreaker = GreedyLineBreaker(),
     private val justifier: Justifier = Justifier(),
     private val textShaper: TextShaper = ExplainableStubTextShaper(),
@@ -77,24 +76,15 @@ class ExplainableStubParagraphLayoutEngine(
 
         val quotePairs = quotePairAnalyzer.analyze(text)
         val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier, context)
-        val bracketPairs = bracketPairAnalyzer.analyze(text)
-        val bracketRoleOverrides = bracketPairAnalyzer.classifyPairs(text, bracketPairs, fontRoleClassifier, context)
-        val combinedRoleOverrides = quoteRoleOverrides + bracketRoleOverrides
         val roleOverrideInfos = quoteRoleOverrides.toRoleOverrideInfos(
             text = text,
             baseClassifier = fontRoleClassifier,
             context = context,
             source = "QuotePairAwareLatinContext",
             reason = "quote-pair-outer-context",
-        ) + bracketRoleOverrides.toRoleOverrideInfos(
-            text = text,
-            baseClassifier = fontRoleClassifier,
-            context = context,
-            source = "BracketPairAwareLatinContext",
-            reason = "bracket-pair-outer-context",
         )
-        val effectiveClassifier: FontRoleClassifier = if (combinedRoleOverrides.isNotEmpty()) {
-            QuotePairAwareFontRoleClassifier(fontRoleClassifier, combinedRoleOverrides)
+        val effectiveClassifier: FontRoleClassifier = if (quoteRoleOverrides.isNotEmpty()) {
+            QuotePairAwareFontRoleClassifier(fontRoleClassifier, quoteRoleOverrides)
         } else {
             fontRoleClassifier
         }

@@ -91,7 +91,7 @@ object EarlyLayoutFixtures {
             id = "ascii-brackets-in-cjk",
             text = "中文段落(English)和[mixed]说明。",
             constraints = LayoutConstraints(maxWidth = 240f),
-            notes = "ASCII parentheses and square brackets inside CJK text: BracketPairAnalyzer assigns them CjkPunctuation so they pick the CJK font instead of the symbol fallback.",
+            notes = "ASCII (, ), [, ] do not share code points with the CJK fullwidth forms （）【】, so they always classify as Latin. (English) and [mixed] cluster as Latin runs and render in latin-primary even when surrounded by CJK content.",
         ),
     )
 }

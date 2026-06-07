@@ -68,6 +68,23 @@ class CjkFontRoleClassifierTest {
     }
 
     @Test
+    fun classifiesAsciiBracketsAsLatin() {
+        // ASCII parens/brackets do not share a code point with CJK fullwidth
+        // forms, so they are classified as Latin regardless of context. (For
+        // context-aware classification of genuinely shared code points see
+        // U+201C/201D curly quotes above.)
+        assertEquals(FontRole.LatinText, classifier.classify("(", TextRange(0, 1)))
+        assertEquals(FontRole.LatinText, classifier.classify(")", TextRange(0, 1)))
+        assertEquals(FontRole.LatinText, classifier.classify("[", TextRange(0, 1)))
+        assertEquals(FontRole.LatinText, classifier.classify("]", TextRange(0, 1)))
+        assertEquals(FontRole.LatinText, classifier.classify("{", TextRange(0, 1)))
+        assertEquals(FontRole.LatinText, classifier.classify("}", TextRange(0, 1)))
+        // Inside CJK content the role does not change — code point alone
+        // determines classification for these characters.
+        assertEquals(FontRole.LatinText, classifier.classify("中(文", TextRange(1, 2)))
+    }
+
+    @Test
     fun classifiesCurlyQuotesAsCjkAtTextBoundary() {
         // Quote at start of text -> no left neighbor -> CjkPunctuation
         assertEquals(FontRole.CjkPunctuation, classifier.classify("\u201C\u4F60\u597D\u201D", TextRange(0, 1)))

@@ -57,6 +57,7 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             firstCodePoint.isLatinCurlyQuote(text, range) -> FontRole.LatinText
             firstCodePoint.isCjkPunctuationCodePoint() -> FontRole.CjkPunctuation
             firstCodePoint.isLatinCodePoint() -> FontRole.LatinText
+            firstCodePoint.isAsciiLatinPunctuation() -> FontRole.LatinText
             firstCodePoint.isEmojiCodePoint() -> FontRole.Emoji
             firstCodePoint.isSymbolCodePoint() -> FontRole.Symbol
             else -> FontRole.Unknown
@@ -130,6 +131,25 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this in 0x0061..0x007A ||
             this in 0x0030..0x0039 ||
             this in 0x00C0..0x024F
+
+    /**
+     * ASCII punctuation that does NOT share a code point with CJK fullwidth
+     * forms. These are always Latin by typed intent — if the author wanted
+     * fullwidth they would have typed U+FF08 / U+FF09 / etc. Listed here so
+     * they classify as [FontRole.LatinText] (and aggregate with adjacent
+     * Latin runs) instead of falling through to [FontRole.Unknown] and
+     * landing on the symbol fallback font.
+     *
+     * Pair-aware analyzers ([QuotePairAnalyzer]) are reserved for genuinely
+     * shared code points (U+2018–201D curly quotes), not for these.
+     */
+    private fun Int.isAsciiLatinPunctuation(): Boolean =
+        this == 0x0028 || // (
+            this == 0x0029 || // )
+            this == 0x005B || // [
+            this == 0x005D || // ]
+            this == 0x007B || // {
+            this == 0x007D // }
 
     private fun Int.isEmojiCodePoint(): Boolean =
         this in 0x1F300..0x1FAFF
