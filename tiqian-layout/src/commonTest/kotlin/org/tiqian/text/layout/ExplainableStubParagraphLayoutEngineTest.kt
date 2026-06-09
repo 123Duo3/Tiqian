@@ -568,9 +568,12 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun appliesAdjacentPunctuationCompressionToDrawableGeometry() {
+        // 」。 is a Closing+PauseOrStop pair — a standard CLREQ collapse.
+        // (，。 was used here before, but consecutive PauseOrStop pairs are
+        // now exempt from compression per ConsecutivePauseOrStopKeepsFullWidth.)
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("你好，。"),
+                content = TiqianTextContent("你好」。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
@@ -578,12 +581,12 @@ class ExplainableStubParagraphLayoutEngineTest {
         val line = result.lines.single()
         val stop = result.clusters.first { it.text == "。" }
 
-        // Class-based glue: ， trailing=8, 。 trailing=8.
-        // Spacing compression: inner glue = ，.trailing(8) + 。.leading(0) = 8
+        // Class-based glue: 」 trailing=8, 。 trailing=8.
+        // Spacing compression: inner glue = 」.trailing(8) + 。.leading(0) = 8
         //   → adjusted = max(0, 8 - 0.5em) = 0 (CLREQ: closing+pause-stop bodies touch),
-        //   reduction=8, target=，(has trailing glue).
+        //   reduction=8, target=」(has trailing glue).
         // Line-end trim: 。 trailing(8) fully consumed → 。 advance = 8.
-        // ，: 16 - 8(spacing) = 8 (body only). 。: 16 - 8(edge trim) = 8.
+        // 」: 16 - 8(spacing) = 8 (body only). 。: 16 - 8(edge trim) = 8.
         // Total: 16 + 16 + 8 + 8 = 48.
         assertEquals(64f, line.naturalWidth)
         assertEquals(48f, line.adjustedWidth)
@@ -616,12 +619,12 @@ class ExplainableStubParagraphLayoutEngineTest {
         val spacing = result.debug.spacingDecisions.single()
         assertEquals(2, spacing.range.start)
         assertEquals(4, spacing.range.end)
-        assertEquals('，', spacing.leftChar)
+        assertEquals('」', spacing.leftChar)
         assertEquals('。', spacing.rightChar)
         assertEquals(8f, spacing.naturalInnerGlue)
         assertEquals(0f, spacing.adjustedInnerGlue)
         assertEquals(8f, spacing.reduction)
-        // Reduction targets ， (which has the trailing glue)
+        // Reduction targets 」 (which has the trailing glue)
         assertEquals(2, spacing.reductionTargetRange.start)
         assertEquals(3, spacing.reductionTargetRange.end)
         assertEquals("collapse-adjacent-punctuation-inner-glue", spacing.reason)

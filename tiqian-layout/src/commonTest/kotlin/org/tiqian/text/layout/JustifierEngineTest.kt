@@ -100,34 +100,26 @@ class JustifierEngineTest {
     @Test
     fun justifyDistributesDeficitAcrossPriorityChain() {
         // Two-line text where line 0 has punctuation-spacing compression.
-        // text = "中，。文中文中文中"  (9 clusters, CJK = 16f, ，。 collapsed -4)
+        // text = "中」。文中文中文中"  (9 clusters, CJK = 16f)
         // maxWidth = 80
-        // Class-based glue: ，trailing=8, 。leading=0. Inner=8, adjusted=4,
-        // reduction=4 on ，'s trailing.
-        // Greedy line 0: 中(16) ，(12 after spacing) 。(16) 文(16) 中(16) → 76.
-        // But 。 at non-line-end doesn't get edge trim here.
-        // Actually 。's trailing=8 is only trimmed at line-END. On line 0 middle
-        // position, no trim. So accum: 16+12+16+16+16=76, next 文→92 > 80, break.
-        // Wait — line-end trim for line 0's last cluster (中 at index 4): no punct.
-        // But 。 at position 2 is not at line end.
-        // Line 0 = clusters 0..4, adjustedWidth = 76. deficit = 80 - 76 = 4.
-        // PunctuationGlue cap = ，'s trailing remaining after spacing (8-4=4).
-        // Fully absorbs deficit.
+        // 」。 is Closing+PauseOrStop: inner = 」.trailing(8) + 。.leading(0)
+        // = 8 → collapsed to 0, reduction=8 on 」's trailing → 」 advance 8.
+        // Greedy line 0: 中(16) 」(8) 。(16) 文(16) 中(16) → 72; next 文→88 > 80.
+        // Line 0 = clusters 0..4, deficit = 80 - 72 = 8.
         val result = engine.layout(
             LayoutInput(
-                content = TiqianTextContent("中，。文中文中文中"),
+                content = TiqianTextContent("中」。文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
                 paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
             ),
         )
         assertTrue(result.lines.size >= 2)
         val firstDecision = result.debug.justificationDecisions.first()
-        // With the CLREQ collapse rule (half-em capped), the `，。` pair's
-        // inner glue collapses to 0; deficit on line 0 is 8. The collapse is
-        // MANDATORY — justification must not re-open `，。`. The deficit is
-        // filled by tier-1 punctuation glue expansion on 。's trailing side
-        // (。→文, capped at 0.125em = 2) and CjkInterChar (文→中, +4); the
-        // remaining 2 stays unfilled rather than re-opening the collapse.
+        // The collapse is MANDATORY — justification must not re-open `」。`.
+        // The deficit is filled by tier-1 punctuation glue expansion on 。's
+        // trailing side (。→文, capped at 0.125em = 2) and CjkInterChar
+        // (文→中, +4); the remaining 2 stays unfilled rather than re-opening
+        // the collapse.
         assertEquals(8f, firstDecision.deficitBefore)
         assertEquals(2f, firstDecision.deficitAfter)
         assertEquals(2, firstDecision.allocations.size)
@@ -136,7 +128,7 @@ class JustifierEngineTest {
         assertEquals(2f, punctAlloc.delta)
         assertEquals("PunctuationGlueFirstJustification", punctAlloc.reason)
         // The expanded gap is 。→文 (cluster 。 at source 2-3), NOT the
-        // collapsed ，。 inner boundary.
+        // collapsed 」。 inner boundary.
         assertEquals(2, punctAlloc.clusterRange.start)
         val interAlloc = firstDecision.allocations.single { it.kind == "CjkInterChar" }
         assertEquals(4f, interAlloc.delta)
@@ -144,14 +136,14 @@ class JustifierEngineTest {
         // Line 0 reaches 78 of 80: capacity exhausted without touching the
         // collapsed pair.
         assertEquals(78f, result.lines[0].visualWidth)
-        // Cluster ， (range 1-2) stays at its collapsed advance: the spacing
+        // Cluster 」 (range 1-2) stays at its collapsed advance: the spacing
         // compression is not elastic.
-        val commaCluster = result.clusters.single { it.text == "，" }
-        assertEquals(8f, commaCluster.advance)
-        val commaGeometry = result.debug.geometryDecisions.single { it.sourceText == "，" }
-        assertEquals(8f, commaGeometry.trailingGlueConsumed)
-        assertEquals(0f, commaGeometry.justificationDelta)
-        assertEquals(8f, commaGeometry.resolvedAdvance)
+        val closingCluster = result.clusters.single { it.text == "」" }
+        assertEquals(8f, closingCluster.advance)
+        val closingGeometry = result.debug.geometryDecisions.single { it.sourceText == "」" }
+        assertEquals(8f, closingGeometry.trailingGlueConsumed)
+        assertEquals(0f, closingGeometry.justificationDelta)
+        assertEquals(8f, closingGeometry.resolvedAdvance)
     }
 
     @Test
