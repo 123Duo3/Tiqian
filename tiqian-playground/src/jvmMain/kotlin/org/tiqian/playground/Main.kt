@@ -14,6 +14,7 @@ import org.tiqian.text.layout.LookaheadLineBreaker
 import org.tiqian.text.shaping.ExplainableStubTextShaper
 import org.tiqian.text.shaping.TextShaper
 import org.tiqian.text.shaping.jvm.AwtTextShaper
+import org.tiqian.text.shaping.skia.SkiaTextShaper
 import org.tiqian.text.test.EarlyLayoutFixtures
 import org.tiqian.text.test.LayoutFixture
 import java.awt.Color
@@ -229,6 +230,10 @@ private enum class ShaperMode(
         id = "jvm-awt",
         description = "JVM AWT Font.layoutGlyphVector real advance",
     ),
+    Skia(
+        id = "skia",
+        description = "Skiko TextLine real advance + ink bounds",
+    ),
     Stub(
         id = "stub",
         description = "deterministic nominal em advance",
@@ -237,6 +242,7 @@ private enum class ShaperMode(
     fun createShaper(): TextShaper =
         when (this) {
             JvmAwt -> AwtTextShaper()
+            Skia -> SkiaTextShaper()
             Stub -> ExplainableStubTextShaper()
         }
 
@@ -244,6 +250,7 @@ private enum class ShaperMode(
         fun fromEnvironment(): ShaperMode =
             when (System.getenv("TIQIAN_PLAYGROUND_SHAPER")?.lowercase(Locale.ROOT)) {
                 "stub" -> Stub
+                "skia", "skiko" -> Skia
                 "jvm", "jvm-awt", "awt", null, "" -> JvmAwt
                 else -> JvmAwt
             }

@@ -19,6 +19,9 @@ tiqian-shaping-api
 tiqian-shaping-jvm
   JVM/AWT 真实 advance 测量 adapter，用于 playground 和早期 contract 验证。
 
+tiqian-shaping-skia
+  Skiko (Skia) 测量 adapter，与 AWT 输出做 CLREQ 标点交叉验证 golden。
+
 tiqian-linebreak
   断行机会与 line break analyzer 接口。
 

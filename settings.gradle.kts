@@ -21,6 +21,7 @@ include(
     ":tiqian-font",
     ":tiqian-shaping-api",
     ":tiqian-shaping-jvm",
+    ":tiqian-shaping-skia",
     ":tiqian-linebreak",
     ":tiqian-clreq",
     ":tiqian-layout",
