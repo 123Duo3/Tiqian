@@ -41,7 +41,7 @@ class PunctuationBodyFloorInvariantTest {
                         LayoutInput(
                             content = TiqianTextContent(text),
                             constraints = LayoutConstraints(maxWidth = maxWidth),
-                            paragraphStyle = ParagraphStyle(textAlign = align),
+                            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = align),
                         ),
                     )
                     result.debug.geometryDecisions.forEach { geometry ->

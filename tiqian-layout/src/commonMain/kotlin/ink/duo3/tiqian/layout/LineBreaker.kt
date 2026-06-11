@@ -25,8 +25,18 @@ interface LineBreaker {
          * instead; a range wider than the measure falls back to splitting.
          */
         unbreakableRanges: List<IntRange> = emptyList(),
+        /**
+         * 段首缩进 in layout units: the line that starts at cluster 0 has
+         * its usable measure reduced to `maxWidth - firstLineIndent`. All
+         * other lines use the full [maxWidth].
+         */
+        firstLineIndent: Float = 0f,
     ): LineSolution
 }
+
+/** Usable measure of a line starting at [lineStartCluster] (段首缩进). */
+internal fun lineLimit(maxWidth: Float, firstLineIndent: Float, lineStartCluster: Int): Float =
+    if (lineStartCluster == 0) maxWidth - firstLineIndent else maxWidth
 
 /**
  * One shrinkable resource on a cluster (ADR 0020, CLREQ 挤压处理优先顺序):
@@ -106,13 +116,14 @@ class GreedyLineBreaker(
         maxWidth: Float,
         shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
+        firstLineIndent: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
             "naturalClusters and adjustedClusters must align cluster-for-cluster."
         }
 
-        val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth, unbreakableRanges)
+        val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth, unbreakableRanges, firstLineIndent)
         return applyKinsokuRepairs(
             initial = greedy,
             naturalClusters = naturalClusters,
@@ -124,6 +135,7 @@ class GreedyLineBreaker(
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
             unbreakableRanges = unbreakableRanges,
+            firstLineIndent = firstLineIndent,
         )
     }
 
@@ -132,6 +144,7 @@ class GreedyLineBreaker(
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
         unbreakableRanges: List<IntRange>,
+        firstLineIndent: Float,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
@@ -141,7 +154,7 @@ class GreedyLineBreaker(
         var i = 0
         while (i < adjustedClusters.size) {
             val nextAdjusted = adjustedAccum + adjustedClusters[i].advance
-            val overflows = nextAdjusted > maxWidth && i > lineStart
+            val overflows = nextAdjusted > lineLimit(maxWidth, firstLineIndent, lineStart) && i > lineStart
             if (overflows) {
                 val breakAt = adjustBreakForUnbreakables(i, lineStart, unbreakableRanges)
                 lines += rebuildLine(
@@ -207,6 +220,7 @@ class LookaheadLineBreaker(
         maxWidth: Float,
         shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
+        firstLineIndent: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -219,7 +233,11 @@ class LookaheadLineBreaker(
         var lineStart = 0
         while (lineStart < adjustedClusters.size) {
             val greedyEnd = adjustBreakForUnbreakables(
-                breakAt = findGreedyEnd(adjustedClusters, lineStart, maxWidth),
+                breakAt = findGreedyEnd(
+                    adjustedClusters,
+                    lineStart,
+                    lineLimit(maxWidth, firstLineIndent, lineStart),
+                ),
                 lineStart = lineStart,
                 unbreakableRanges = unbreakableRanges,
             )
@@ -252,6 +270,7 @@ class LookaheadLineBreaker(
                     adjusted = adjustedClusters,
                     maxWidth = maxWidth,
                     shrinkOpportunities = shrinkOpportunities,
+                    firstLineIndent = firstLineIndent,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -278,6 +297,7 @@ class LookaheadLineBreaker(
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
             unbreakableRanges = unbreakableRanges,
+            firstLineIndent = firstLineIndent,
         )
     }
 
@@ -288,6 +308,7 @@ class LookaheadLineBreaker(
         adjusted: List<Cluster>,
         maxWidth: Float,
         shrinkOpportunities: List<ShrinkOpportunity>,
+        firstLineIndent: Float,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -309,13 +330,14 @@ class LookaheadLineBreaker(
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
+            firstLineIndent = firstLineIndent,
         ).lines
 
         val horizon = (1 + futureLineHorizon).coerceAtMost(spliced.size)
         var score = 0f
         for (idx in 0 until horizon) {
             val isLast = (idx == spliced.lastIndex)
-            score += badness(spliced[idx], maxWidth, isLast)
+            score += badness(spliced[idx], maxWidth, isLast, firstLineIndent)
         }
         return score
     }
@@ -356,8 +378,14 @@ class LookaheadLineBreaker(
         return lines
     }
 
-    private fun badness(line: LineCandidate, maxWidth: Float, isLast: Boolean): Float {
-        val ragged = if (isLast) 0f else (maxWidth - line.adjustedWidth).coerceAtLeast(0f)
+    private fun badness(
+        line: LineCandidate,
+        maxWidth: Float,
+        isLast: Boolean,
+        firstLineIndent: Float,
+    ): Float {
+        val limit = lineLimit(maxWidth, firstLineIndent, line.clusterRange.first)
+        val ragged = if (isLast) 0f else (limit - line.adjustedWidth).coerceAtLeast(0f)
         return ragged * raggednessWeight + (line.repair?.penalty ?: 0).toFloat()
     }
 }
@@ -373,6 +401,7 @@ internal fun applyKinsokuRepairs(
     carryPreviousPenalty: Int,
     leaveRaggedPenalty: Int,
     unbreakableRanges: List<IntRange> = emptyList(),
+    firstLineIndent: Float = 0f,
 ): LineSolution {
     if (initial.size < 2) return LineSolution(initial)
 
@@ -393,7 +422,9 @@ internal fun applyKinsokuRepairs(
             curr = curr,
             naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
-            maxWidth = maxWidth,
+            // The merged line keeps prev's start — a first-line PushIn must
+            // fit inside the indented measure.
+            maxWidth = lineLimit(maxWidth, firstLineIndent, prev.clusterRange.first),
             shrinkOpportunities = shrinkOpportunities,
             pushInPenalty = pushInPenalty,
         )

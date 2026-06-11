@@ -52,6 +52,7 @@ class LayoutDumpGoldenTest {
                             paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
                                 textAlign = fixture.textAlign,
                                 lineHeight = fixture.lineHeight,
+                                firstLineIndentEm = fixture.firstLineIndentEm,
                             ),
                             decorations = fixture.decorations,
                         ),
@@ -103,8 +104,9 @@ class LayoutDumpGoldenTest {
                     "deficit=${j.deficitBefore.fmt()}->${j.deficitAfter.fmt()} " +
                         j.allocations.joinToString(",") { "${it.kind}@${it.clusterRange.start}+${it.delta.fmt()}" }
                 } ?: "-"
+            val indent = if (line.indent > 0f) "indent=${line.indent.fmt()} " else ""
             appendLine(
-                "line[$i] ${line.range.start}-${line.range.end} " +
+                "line[$i] ${line.range.start}-${line.range.end} $indent" +
                     "natural=${line.naturalWidth.fmt()} adjusted=${line.adjustedWidth.fmt()} " +
                     "visual=${line.visualWidth.fmt()} repair=$repair candidates=$candidates justify=$justify",
             )

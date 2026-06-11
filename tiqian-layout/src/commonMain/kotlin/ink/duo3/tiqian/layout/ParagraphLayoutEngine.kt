@@ -278,6 +278,9 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
+        // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
+        // measure shrinks by the indent; rendering shifts its start edge.
+        val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
         } else {
@@ -285,6 +288,7 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalClusters = naturalClusters,
                 adjustedClusters = clusters,
                 maxWidth = input.constraints.maxWidth,
+                firstLineIndent = firstLineIndent,
                 shrinkOpportunities = shrinkOpportunities,
                 // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
                 // whenever they fit (ADR 0018).
@@ -404,7 +408,11 @@ class ExplainableStubParagraphLayoutEngine(
                     adjustedClusters = trimmedClusters,
                     clusterRoles = clusterRoles,
                     lineClusterRange = lineCandidate.clusterRange,
-                    maxWidth = input.constraints.maxWidth,
+                    maxWidth = if (lineCandidate.clusterRange.first == 0) {
+                        input.constraints.maxWidth - firstLineIndent
+                    } else {
+                        input.constraints.maxWidth
+                    },
                     spacingPlan = spacingPlan,
                     fontSize = fontSize,
                     skip = false,
@@ -456,6 +464,7 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
+                indent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else 0f,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(
@@ -483,7 +492,7 @@ class ExplainableStubParagraphLayoutEngine(
             fontSize = fontSize,
         )
 
-        val widestLine = lines.maxOfOrNull { it.visualWidth } ?: 0f
+        val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 
@@ -649,7 +658,7 @@ class ExplainableStubParagraphLayoutEngine(
         for (span in decorations) {
             if (span.kind != DecorationKind.Emphasis) continue
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
-                var x = 0f
+                var x = lineBoxes[lineIndex].indent
                 for (idx in clusterRange) {
                     val cluster = finalClusters[idx]
                     val coveredBySpan = cluster.range.start >= span.range.start &&
@@ -709,7 +718,7 @@ class ExplainableStubParagraphLayoutEngine(
         for (span in mourningSpans) {
             val spanSegments = mutableListOf<DecorationSegmentInfo>()
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
-                var x = 0f
+                var x = lineBoxes[lineIndex].indent
                 var left: Float? = null
                 var right = 0f
                 var segStart = -1

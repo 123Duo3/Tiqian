@@ -43,6 +43,17 @@ data class ParagraphStyle(
     val textAlign: TextAlign = TextAlign.Start,
     val writingMode: WritingMode = WritingMode.HorizontalTb,
     val lineHeight: Float? = null,
+    /**
+     * 段首缩进, in ems of the paragraph font size. CLREQ: 「段首缩排以两个
+     * 汉字的空间为标准」— hence the default 2. Multi-column magazine styles
+     * commonly use 1; 0 disables the indent. The indent insets the FIRST
+     * line's start edge only (in vertical writing this becomes a block-start
+     * inset of the first column). A first line opening with a bracket or
+     * quote needs no special casing: the additive glue model already trims
+     * the opening punctuation's leading blank at every line start, which IS
+     * CLREQ's「缩减该符号始侧二分之一个汉字大小的空白」.
+     */
+    val firstLineIndentEm: Float = 2f,
 )
 
 enum class TextAlign {

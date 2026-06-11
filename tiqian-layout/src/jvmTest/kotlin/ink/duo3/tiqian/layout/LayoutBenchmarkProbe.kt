@@ -49,7 +49,7 @@ class LayoutBenchmarkProbe {
             val input = LayoutInput(
                 content = TiqianTextContent(paragraph),
                 constraints = LayoutConstraints(maxWidth = 320f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             )
             repeat(warmup) { engine.layout(input) }
             val nanos = measureNanoTime { repeat(iterations) { engine.layout(input) } }

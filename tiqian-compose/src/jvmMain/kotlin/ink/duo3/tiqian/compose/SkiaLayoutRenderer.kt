@@ -36,7 +36,7 @@ internal fun DrawScope.drawTiqianLayout(
             val lineClusters = result.clusters.filter {
                 it.range.start >= line.range.start && it.range.end <= line.range.end
             }
-            var x = 0f
+            var x = line.indent
             val baselineY = line.baseline
             for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role

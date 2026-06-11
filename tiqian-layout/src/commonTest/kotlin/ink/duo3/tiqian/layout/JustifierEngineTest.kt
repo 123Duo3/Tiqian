@@ -24,7 +24,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Start),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Start),
             ),
         )
         val line = result.lines.single()
@@ -39,7 +39,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         val line = result.lines.single()
@@ -60,7 +60,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -86,7 +86,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中，。文"),
                 constraints = LayoutConstraints(maxWidth = 64f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         // Single line: but justifier needs a non-last line to fire. With only
@@ -110,7 +110,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中」。文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertTrue(result.lines.size >= 2)
@@ -155,7 +155,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中文中文中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -185,7 +185,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -211,7 +211,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文（Hello）中文中文"),
                 constraints = LayoutConstraints(maxWidth = 170f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -234,7 +234,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文 Hello 中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 180f),
-                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
             ),
         )
         assertTrue(result.lines.size >= 2)

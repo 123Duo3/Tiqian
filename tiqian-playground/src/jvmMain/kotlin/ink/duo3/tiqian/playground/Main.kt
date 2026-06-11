@@ -54,6 +54,7 @@ fun main() {
             paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
                 textAlign = fixture.textAlign,
                 lineHeight = fixture.lineHeight,
+                firstLineIndentEm = fixture.firstLineIndentEm,
             ),
             decorations = fixture.decorations,
         )
@@ -149,7 +150,7 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         val lineClusters = result.clusters.filter {
             it.range.start >= line.range.start && it.range.end <= line.range.end
         }
-        var x = 0f
+        var x = line.indent
         val baselineY = line.baseline + topPad
         for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
             val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
@@ -282,7 +283,7 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             val lineClusters = result.clusters.filter {
                 it.range.start >= line.range.start && it.range.end <= line.range.end
             }
-            var x = 0f
+            var x = line.indent
             val baselineY = line.baseline + topPad
             for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
@@ -446,8 +447,9 @@ private fun printEngineDump(label: String, result: LayoutResult) {
             val kinds = justify.allocations.map { it.kind }.distinct().joinToString("+")
             " justify=$kinds(+${(justify.deficitBefore - justify.deficitAfter).oneDecimal()})"
         } else ""
+        val indentTag = if (line.indent > 0f) " indent=${line.indent.oneDecimal()}" else ""
         println(
-            "    line[$lineIndex] adjusted=${line.adjustedWidth.oneDecimal()} visual=${line.visualWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag$justifyTag",
+            "    line[$lineIndex]$indentTag adjusted=${line.adjustedWidth.oneDecimal()} visual=${line.visualWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag$justifyTag",
         )
     }
 }
@@ -615,7 +617,7 @@ private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Fl
             val lineClusters = result.clusters.filter {
                 it.range.start >= line.range.start && it.range.end <= line.range.end
             }
-            var x = 0f
+            var x = line.indent
             lineClusters.forEach { cluster ->
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
                 appendLine(
@@ -745,6 +747,9 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
             appendLine("<span class=\"metric\">natural ${line.naturalWidth.oneDecimal()}</span>")
             appendLine("<span class=\"metric\">adjusted ${line.adjustedWidth.oneDecimal()}</span>")
             appendLine("<span class=\"metric\">visual ${line.visualWidth.oneDecimal()}</span>")
+            if (line.indent > 0f) {
+                appendLine("<span class=\"metric\">indent ${line.indent.oneDecimal()}</span>")
+            }
             if (repair?.repair != null) {
                 appendLine("<span class=\"metric\">repair ${repair.repair} (+${repair.repairPenalty})</span>")
             }

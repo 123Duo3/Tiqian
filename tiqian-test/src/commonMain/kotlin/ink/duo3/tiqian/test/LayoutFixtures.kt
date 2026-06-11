@@ -14,6 +14,12 @@ data class LayoutFixture(
     val textAlign: TextAlign = TextAlign.Start,
     val lineHeight: Float? = null,
     val decorations: List<DecorationSpan> = emptyList(),
+    /**
+     * Fixtures pin 0 unless they exercise 段首缩进 — the maxWidth geometry
+     * of the micro fixtures above is hand-tuned to specific break points
+     * and the engine default of 2em would obscure what each one tests.
+     */
+    val firstLineIndentEm: Float = 0f,
 )
 
 object EarlyLayoutFixtures {
@@ -106,8 +112,9 @@ object EarlyLayoutFixtures {
             "每座城市都相信自己手里那一杯才是正统。有人说：「先有咖啡馆，后有启蒙运动」。这话说得夸张" +
             "，但也不算太离谱。",
             constraints = LayoutConstraints(maxWidth = 320f),
-            notes = "Real-text stress test: ~200 chars of authentic Chinese with Latin words, fullwidth/halfwidth brackets, em-dash pair, ellipsis, Chinese quotes, and multiple comma-stop sequences. Triggers multi-line greedy + justification + adjacent punctuation compression simultaneously.",
+            notes = "Real-text stress test: ~200 chars of authentic Chinese with Latin words, fullwidth/halfwidth brackets, em-dash pair, ellipsis, Chinese quotes, and multiple comma-stop sequences. Triggers multi-line greedy + justification + adjacent punctuation compression simultaneously. Uses the standard 2em 段首缩进 like real body text.",
             textAlign = TextAlign.Justify,
+            firstLineIndentEm = 2f,
         ),
         LayoutFixture(
             id = "latin-word-wrap",
@@ -131,6 +138,28 @@ object EarlyLayoutFixtures {
             decorations = listOf(
                 DecorationSpan(range = TextRange(4, 16), kind = DecorationKind.Emphasis),
             ),
+        ),
+        LayoutFixture(
+            id = "first-line-indent",
+            text = "咖啡的风味因产地而各异，烘焙的深浅同样会改变口感与香气。",
+            constraints = LayoutConstraints(maxWidth = 200f),
+            notes = "段首缩进: first line indents 2em (CLREQ standard) — its " +
+                "usable measure shrinks to maxWidth-2em and the LineBox carries " +
+                "the indent; later lines use the full measure. Justify targets " +
+                "the indented measure on line 0.",
+            textAlign = TextAlign.Justify,
+            firstLineIndentEm = 2f,
+        ),
+        LayoutFixture(
+            id = "indent-opening-quote",
+            text = "“好咖啡要趁热喝。”他说完便把杯子推了过来，让大家依次尝一口。",
+            constraints = LayoutConstraints(maxWidth = 192f),
+            notes = "段首缩进 composed with an opening quote at paragraph start: " +
+                "the additive model's line-start leading-glue trim halves the " +
+                "quote (CLREQ 缩减该符号始侧二分之一个汉字大小的空白) — visual " +
+                "blank before the quote ink is exactly the 2em indent.",
+            textAlign = TextAlign.Justify,
+            firstLineIndentEm = 2f,
         ),
         LayoutFixture(
             id = "mourning-frame",

@@ -45,7 +45,7 @@ class LookaheadWindowProbe {
                     LayoutInput(
                         content = TiqianTextContent(paragraph),
                         constraints = LayoutConstraints(maxWidth = maxWidth),
-                        paragraphStyle = ParagraphStyle(textAlign = TextAlign.Start),
+                        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Start),
                     ),
                 )
                 val deficits = result.lines.dropLast(1).map { maxWidth - it.adjustedWidth }

@@ -45,6 +45,12 @@ data class LineBox(
     val naturalWidth: Float,
     val adjustedWidth: Float,
     val visualWidth: Float,
+    /**
+     * Start-edge inset of this line along the inline axis (段首缩进 on a
+     * paragraph's first line; 0 elsewhere). Renderers must begin the pen at
+     * this offset; width fields above exclude it.
+     */
+    val indent: Float = 0f,
     val debug: LineDebugInfo = LineDebugInfo(),
 )
 

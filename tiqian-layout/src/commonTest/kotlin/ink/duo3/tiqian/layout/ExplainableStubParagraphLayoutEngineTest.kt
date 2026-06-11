@@ -8,6 +8,7 @@ import ink.duo3.tiqian.core.Glyph
 import ink.duo3.tiqian.core.GlyphRun
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
+import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.Rect
 import ink.duo3.tiqian.core.TiqianTextContent
 import ink.duo3.tiqian.font.FontRole
@@ -25,6 +26,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun returnsDebuggableSingleLineResult() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("提椠"),
                 constraints = LayoutConstraints(maxWidth = 240f),
             ),
@@ -41,6 +43,7 @@ class ExplainableStubParagraphLayoutEngineTest {
             lineBreaker = LookaheadLineBreaker(),
         ).layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("提椠"),
                 constraints = LayoutConstraints(maxWidth = 240f),
             ),
@@ -61,6 +64,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertFailsWith<IllegalArgumentException> {
             engine.layout(
                 LayoutInput(
+                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                     content = TiqianTextContent("提椠"),
                     constraints = LayoutConstraints(maxWidth = 240f),
                 ),
@@ -105,6 +109,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("A"),
                 constraints = LayoutConstraints(maxWidth = 240f),
             ),
@@ -120,6 +125,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun recordsFallbackDecisionsPerCluster() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("提椠……English——世界。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -163,6 +169,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun preservesSourceTextWhenUsingClreqRecommendedDisplayGlyphs() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("……——・／"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -199,6 +206,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("……——"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -222,6 +230,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("——"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -236,6 +245,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun usesTwoEmAdvanceForRecommendedDashCodepoint() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("⸺"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -249,6 +259,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun keepsLatinTechnicalPunctuationInLatinRun() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("well-known/path"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -265,6 +276,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // each boundary space from 1em (16) to 0.25em (4), saving 24px total.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文 CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -290,6 +302,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // spaces stay at their nominal 1em.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("Hello world"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -316,6 +329,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文 CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -336,6 +350,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // the CJK text on either side is unaffected.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文(English)中文"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -356,6 +371,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // U+FF08/FF09 (which is already CjkPunctuation by code point).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文(中文)"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -371,6 +387,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun keepsTextStartLatinQuotePairInLatinRun() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("“Hello” world"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -394,6 +411,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun skipsNeutralDashBeforeLatinQuotePairInLayout() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("English — “hello”"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -410,6 +428,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun recordsRoleOverridesForResolvedQuotePairs() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("“Hello” world"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -496,6 +515,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -520,6 +540,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun recordsPunctuationAtomsInLayoutDebug() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("你好，世界。——"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -561,6 +582,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("你好。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -581,6 +603,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // now exempt from compression per ConsecutivePauseOrStopKeepsFullWidth.)
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("你好」。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -643,6 +666,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 8 CJK clusters * 16f = 128f natural; maxWidth=64f -> 4 clusters per line -> 2 lines.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文排版引擎测试"),
                 constraints = LayoutConstraints(maxWidth = 64f),
             ),
@@ -677,6 +701,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // can't be split further at cluster level in this slice).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中English"),
                 constraints = LayoutConstraints(maxWidth = 80f),
             ),
@@ -694,6 +719,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 文 (cluster 3) to line 1: line 0 = 中文中, line 1 = 文。.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文。"),
                 constraints = LayoutConstraints(maxWidth = 64f),
             ),
@@ -740,6 +766,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 。 trailing=8, PushIn uses 4, edge trim uses 4 → 。 advance=8.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中。"),
                 constraints = LayoutConstraints(maxWidth = 60f),
             ),
@@ -789,6 +816,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun kinsokuLeavesGreedyBreakAloneWhenNoForbiddenPunctAtLineStart() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文哈哈"),
                 constraints = LayoutConstraints(maxWidth = 64f),
             ),
@@ -810,6 +838,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // has only one cluster, so CarryPrevious cannot apply -> LeaveRagged.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("English。"),
                 constraints = LayoutConstraints(maxWidth = 96f),
             ),
@@ -830,6 +859,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun usesNormalizedIdeographicMetricsForCjkLineBox() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("提椠"),
                 constraints = LayoutConstraints(maxWidth = 240f),
             ),
@@ -850,6 +880,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun stubShaperProducesProfileDerivedWithShapedAdvance() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文，世界。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -907,6 +938,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -930,6 +962,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // line adjusted width 72 → 68.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文 AB 中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 80f),
             ),
@@ -967,6 +1000,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -992,6 +1026,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // maxWidth=128 wraps at 8 clusters/line.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("他强调：豆子新鲜最要紧，烘焙其次。"),
                 constraints = LayoutConstraints(maxWidth = 128f),
                 decorations = listOf(
@@ -1034,6 +1069,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // segment each.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("悼念：王小明同志、张大同同志。"),
                 constraints = LayoutConstraints(maxWidth = 72f),
                 decorations = listOf(
@@ -1076,6 +1112,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // split fallback produces open-ended segments.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("王小明大同先生"),
                 constraints = LayoutConstraints(maxWidth = 64f),
                 decorations = listOf(
@@ -1103,6 +1140,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // run was one unbreakable cluster and simply overflowed).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("The quick brown fox"),
                 constraints = LayoutConstraints(maxWidth = 160f),
             ),
@@ -1135,6 +1173,7 @@ class ExplainableStubParagraphLayoutEngineTest {
                 constraints = LayoutConstraints(maxWidth = 160f),
                 paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
                     textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
+                    firstLineIndentEm = 0f,
                 ),
             ),
         )
@@ -1170,6 +1209,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
         val result = loose.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -1181,6 +1221,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // Default strict style trims to half width.
         val strict = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文。"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -1196,6 +1237,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         val text = "中中中。中中。"
         val default = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent(text),
                 constraints = LayoutConstraints(maxWidth = 96f),
             ),
@@ -1216,6 +1258,7 @@ class ExplainableStubParagraphLayoutEngineTest {
             },
         ).layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent(text),
                 constraints = LayoutConstraints(maxWidth = 96f),
             ),
@@ -1246,6 +1289,7 @@ class ExplainableStubParagraphLayoutEngineTest {
                 constraints = LayoutConstraints(maxWidth = 160f),
                 paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
                     textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
+                    firstLineIndentEm = 0f,
                 ),
             ),
         )
@@ -1255,6 +1299,49 @@ class ExplainableStubParagraphLayoutEngineTest {
                 .flatMap { it.allocations }
                 .none { it.kind == "CjkLatinSpace" },
         )
+    }
+
+    @Test
+    fun firstLineIndentShrinksFirstLineMeasureOnly() {
+        // ParagraphFirstLineIndent: 12 hanzi at maxWidth 160, indent 2em
+        // (32). Line 0 measure = 128 → 8 chars; line 1 uses the full 160.
+        // LineBox carries the inset; width fields exclude it; result width
+        // accounts for indent + visual.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文中文中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals(32f, result.lines[0].indent)
+        assertEquals(0f, result.lines[1].indent)
+        assertEquals(8, result.lines[0].range.end - result.lines[0].range.start)
+        assertEquals(128f, result.lines[0].visualWidth)
+        // Widest extent = indent + first line visual = 160.
+        assertEquals(160f, result.size.width)
+    }
+
+    @Test
+    fun firstLineIndentDefaultsToTwoEmAndZeroDisables() {
+        // CLREQ:「段首缩排以两个汉字的空间为标准」— the engine default.
+        val indented = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+        assertEquals(32f, indented.lines.single().indent)
+
+        val disabled = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+        assertEquals(0f, disabled.lines.single().indent)
     }
 
     @Test
@@ -1317,6 +1404,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中——文"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -1337,6 +1425,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // the `——` → `⸺` substitution stays in effect.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中——文"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -1386,6 +1475,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val result = engine.layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("……"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
