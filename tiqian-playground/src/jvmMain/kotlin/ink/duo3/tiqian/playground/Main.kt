@@ -393,18 +393,29 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             when (seg.kind) {
                 "ProperNoun" -> g.drawLine(l, t, r, t)
                 "BookTitle" -> {
+                    // Same rounded quad-curve waveform as the Skia path
+                    // (ADR 0024 amendment: 圆形波浪为简体默认形态) — the two
+                    // renderers must not disagree on the wave shape.
                     val halfWave = (fontSize * 0.125f).coerceAtLeast(1f)
-                    val amplitude = (fontSize * 0.12f).coerceAtLeast(1f)
+                    val amplitude = fontSize * 0.06f
+                    val path = java.awt.geom.Path2D.Float()
+                    val yLine = (topPad + seg.top)
+                    path.moveTo(seg.left.toDouble(), yLine.toDouble())
                     var x = seg.left
                     var up = true
                     while (x < seg.right) {
                         val nextX = (x + halfWave).coerceAtMost(seg.right)
-                        val midY = if (up) t - amplitude.toInt() else t + amplitude.toInt()
-                        g.drawLine(x.toInt(), t, ((x + nextX) / 2f).toInt(), midY)
-                        g.drawLine(((x + nextX) / 2f).toInt(), midY, nextX.toInt(), t)
+                        val controlY = if (up) yLine - amplitude * 2f else yLine + amplitude * 2f
+                        path.quadTo(
+                            ((x + nextX) / 2f).toDouble(),
+                            controlY.toDouble(),
+                            nextX.toDouble(),
+                            yLine.toDouble(),
+                        )
                         x = nextX
                         up = !up
                     }
+                    g.draw(path)
                 }
                 else -> {
                     g.drawLine(l, t, r, t)
