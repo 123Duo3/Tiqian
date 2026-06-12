@@ -216,8 +216,8 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         }
     }
 
-    // 示亡号 frames (ADR 0018): stroke per-line segments; continuation
-    // edges (open start/end) stay undrawn.
+    // Decoration segments (ADR 0018/0024): 示亡号 frames (continuation
+    // edges stay undrawn), 专名号 straight underlines, 书名号甲式 wavy.
     if (result.debug.decorationSegments.isNotEmpty()) {
         val framePaint = org.jetbrains.skia.Paint().apply {
             color = 0xFF000000.toInt()
@@ -227,10 +227,19 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         for (seg in result.debug.decorationSegments) {
             val t = topPad + seg.top
             val b = topPad + seg.bottom
-            canvas.drawLine(seg.left, t, seg.right, t, framePaint)
-            canvas.drawLine(seg.left, b, seg.right, b, framePaint)
-            if (!seg.openStart) canvas.drawLine(seg.left, t, seg.left, b, framePaint)
-            if (!seg.openEnd) canvas.drawLine(seg.right, t, seg.right, b, framePaint)
+            when (seg.kind) {
+                "ProperNoun" -> canvas.drawLine(seg.left, t, seg.right, t, framePaint)
+                "BookTitle" -> canvas.drawPath(
+                    ink.duo3.tiqian.shaping.skia.wavyLinePath(seg.left, seg.right, t, fontSize),
+                    framePaint,
+                )
+                else -> {
+                    canvas.drawLine(seg.left, t, seg.right, t, framePaint)
+                    canvas.drawLine(seg.left, b, seg.right, b, framePaint)
+                    if (!seg.openStart) canvas.drawLine(seg.left, t, seg.left, b, framePaint)
+                    if (!seg.openEnd) canvas.drawLine(seg.right, t, seg.right, b, framePaint)
+                }
+            }
         }
     }
 
@@ -373,16 +382,37 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             )
         }
 
-        // 示亡号 frames; continuation edges stay undrawn.
+        // Decoration segments: 示亡号 frames (continuation edges stay
+        // undrawn), 专名号 straight underlines, 书名号甲式 wavy (zigzag
+        // approximation — the AWT raster is the legacy debug view).
         for (seg in result.debug.decorationSegments) {
             val t = (topPad + seg.top).toInt()
             val b = (topPad + seg.bottom).toInt()
             val l = seg.left.toInt()
             val r = seg.right.toInt()
-            g.drawLine(l, t, r, t)
-            g.drawLine(l, b, r, b)
-            if (!seg.openStart) g.drawLine(l, t, l, b)
-            if (!seg.openEnd) g.drawLine(r, t, r, b)
+            when (seg.kind) {
+                "ProperNoun" -> g.drawLine(l, t, r, t)
+                "BookTitle" -> {
+                    val halfWave = (fontSize * 0.125f).coerceAtLeast(1f)
+                    val amplitude = (fontSize * 0.12f).coerceAtLeast(1f)
+                    var x = seg.left
+                    var up = true
+                    while (x < seg.right) {
+                        val nextX = (x + halfWave).coerceAtMost(seg.right)
+                        val midY = if (up) t - amplitude.toInt() else t + amplitude.toInt()
+                        g.drawLine(x.toInt(), t, ((x + nextX) / 2f).toInt(), midY)
+                        g.drawLine(((x + nextX) / 2f).toInt(), midY, nextX.toInt(), t)
+                        x = nextX
+                        up = !up
+                    }
+                }
+                else -> {
+                    g.drawLine(l, t, r, t)
+                    g.drawLine(l, b, r, b)
+                    if (!seg.openStart) g.drawLine(l, t, l, b)
+                    if (!seg.openEnd) g.drawLine(r, t, r, b)
+                }
+            }
         }
     } finally {
         g.dispose()

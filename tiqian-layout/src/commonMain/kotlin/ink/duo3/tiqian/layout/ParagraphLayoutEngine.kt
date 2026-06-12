@@ -784,11 +784,15 @@ class ExplainableStubParagraphLayoutEngine(
         justifyDeltaByCluster: Map<Int, Float>,
         fontSize: Float,
     ): List<DecorationSegmentInfo> {
-        val mourningSpans = decorations.filter { it.kind == DecorationKind.Mourning }
-        if (mourningSpans.isEmpty()) return emptyList()
+        val boxSpans = decorations.filter {
+            it.kind == DecorationKind.Mourning ||
+                it.kind == DecorationKind.ProperNoun ||
+                it.kind == DecorationKind.BookTitle
+        }
+        if (boxSpans.isEmpty()) return emptyList()
 
         val segments = mutableListOf<DecorationSegmentInfo>()
-        for (span in mourningSpans) {
+        for (span in boxSpans) {
             val spanSegments = mutableListOf<DecorationSegmentInfo>()
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
                 var x = lineBoxes[lineIndex].indent
@@ -805,6 +809,10 @@ class ExplainableStubParagraphLayoutEngine(
                             left = x
                             segStart = cluster.range.start
                         }
+                        // The segment follows the justified glyph positions
+                        // (行间线随拉开的字距延长、不断开), but the LAST
+                        // cluster's trailing justify delta stays outside —
+                        // 长度与文字外框一致.
                         right = x + cluster.advance - (justifyDeltaByCluster[idx] ?: 0f)
                         segEnd = cluster.range.end
                     }
@@ -812,27 +820,68 @@ class ExplainableStubParagraphLayoutEngine(
                 }
                 val leftEdge = left ?: return@forEachIndexed
                 val baseline = lineBoxes[lineIndex].baseline
+                val isLine = span.kind != DecorationKind.Mourning
+                // 行间线贴字：face bottom (+0.12em) plus a hairline of air;
+                // 先线后点 holds because the emphasis dot ink starts at
+                // +0.34em, below the line.
+                val lineY = baseline + fontSize * INTERLINEAR_LINE_Y_EM
                 spanSegments += DecorationSegmentInfo(
                     sourceRange = TextRange(segStart, segEnd),
                     kind = span.kind.name,
                     lineIndex = lineIndex,
                     left = leftEdge,
-                    top = baseline - fontSize * MOURNING_FRAME_FACE_ASCENT_EM,
+                    top = if (isLine) lineY else baseline - fontSize * MOURNING_FRAME_FACE_ASCENT_EM,
                     right = right,
-                    bottom = baseline + fontSize * MOURNING_FRAME_FACE_DESCENT_EM,
+                    bottom = if (isLine) lineY else baseline + fontSize * MOURNING_FRAME_FACE_DESCENT_EM,
                     openStart = segStart > span.range.start,
                     openEnd = segEnd < span.range.end,
                     reason = "",
                 )
             }
-            val reason = if (spanSegments.size <= 1) {
-                "MourningSpanKeptUnbroken"
-            } else {
-                "mourning-span-split-across-lines"
+            val reason = when {
+                span.kind == DecorationKind.Mourning && spanSegments.size <= 1 -> "MourningSpanKeptUnbroken"
+                span.kind == DecorationKind.Mourning -> "mourning-span-split-across-lines"
+                else -> "InterlinearLinePerAnnotatedItem"
             }
             segments += spanSegments.map { it.copy(reason = reason) }
         }
-        return segments
+        return shortenAdjacentInterlinearLines(segments, fontSize)
+    }
+
+    /**
+     * `AdjacentInterlinearLineShortening` (CLREQ 行间标点通则): adjacent
+     * 专名号/书名号 marks shorten their ADJACENT sides only, so two
+     * annotated items read as two — the outer sides keep the text's outer
+     * frame. Each adjacent edge pulls back 1/16 em (the visible gap is
+     * 1/8 em, within the ≤1/8 em-per-side cap).
+     */
+    private fun shortenAdjacentInterlinearLines(
+        segments: List<DecorationSegmentInfo>,
+        fontSize: Float,
+    ): List<DecorationSegmentInfo> {
+        val lineKinds = setOf(DecorationKind.ProperNoun.name, DecorationKind.BookTitle.name)
+        val result = segments.toMutableList()
+        val byLine = result.withIndex()
+            .filter { it.value.kind in lineKinds }
+            .groupBy { it.value.lineIndex }
+        for ((_, entries) in byLine) {
+            val ordered = entries.sortedBy { it.value.left }
+            for (i in 0 until ordered.size - 1) {
+                val a = ordered[i]
+                val b = ordered[i + 1]
+                if (b.value.left - a.value.right > ADJACENT_LINE_EPSILON * fontSize) continue
+                val pullback = fontSize * ADJACENT_LINE_SHORTEN_EM
+                result[a.index] = result[a.index].copy(
+                    right = result[a.index].right - pullback,
+                    reason = result[a.index].reason + ";AdjacentInterlinearLineShortening",
+                )
+                result[b.index] = result[b.index].copy(
+                    left = result[b.index].left + pullback,
+                    reason = result[b.index].reason + ";AdjacentInterlinearLineShortening",
+                )
+            }
+        }
+        return result
     }
 
     private fun Map<Int, FontRole>.toRoleOverrideInfos(
@@ -1539,6 +1588,19 @@ internal data class GlueCapacity(val leading: Float, val trailing: Float)
  */
 private const val MOURNING_FRAME_FACE_ASCENT_EM = 0.88f
 private const val MOURNING_FRAME_FACE_DESCENT_EM = 0.12f
+
+/**
+ * 行间线（专名号/书名号甲式）的横排 y：字面底 (+0.12em) 下方留一线空气
+ * （行间标点应尽量紧贴所标注汉字一侧），与着重号同现时点墨水上缘在
+ * +0.34em——先线后点成立。
+ */
+private const val INTERLINEAR_LINE_Y_EM = 0.18f
+
+/** 相邻行间线各自回缩量（可见间隙 1/8em，单侧 ≤1/8em 上限内）. */
+private const val ADJACENT_LINE_SHORTEN_EM = 0.0625f
+
+/** 相邻判定：间距小于此值视为相邻（密排时为 0）. */
+private const val ADJACENT_LINE_EPSILON = 0.01f
 
 /**
  * Contiguous cluster-index range whose clusters are fully covered by

@@ -37,6 +37,21 @@ enum class DecorationKind {
      * line; when it cannot fit it splits into per-line open-ended segments.
      */
     Mourning,
+
+    /**
+     * 专名号 — a straight underline below a proper noun (horizontal
+     * writing). One of the CLREQ 行间线: one continuous segment per
+     * annotated item, length matching the text's outer frame, never split
+     * or pieced together within a line; adjacent items shorten their
+     * ADJACENT sides only (≤1/8 em) so the two marks read separately.
+     */
+    ProperNoun,
+
+    /**
+     * 书名号（甲式）— a wavy underline below a work's title (horizontal
+     * writing). Same 行间线 segment rules as [ProperNoun].
+     */
+    BookTitle,
 }
 
 data class ParagraphStyle(

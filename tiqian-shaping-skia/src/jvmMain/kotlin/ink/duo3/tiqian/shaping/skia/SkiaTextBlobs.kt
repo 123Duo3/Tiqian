@@ -106,3 +106,26 @@ object SkiaSystemTypefaces {
         LATIN_CANDIDATES.firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, FontStyle.NORMAL) }
     }
 }
+
+/**
+ * 书名号甲式 wavy underline path (ADR 0024): quad waves with ~0.25em
+ * wavelength and ~0.06em amplitude, sized to the annotated text's font.
+ * Shared by the Compose renderer and the playground raster, like
+ * [shapeTextBlob].
+ */
+fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): org.jetbrains.skia.Path {
+    val builder = org.jetbrains.skia.PathBuilder()
+    val halfWave = (fontSize * 0.125f).coerceAtLeast(1f)
+    val amplitude = fontSize * 0.06f
+    builder.moveTo(left, y)
+    var x = left
+    var up = true
+    while (x < right) {
+        val nextX = (x + halfWave).coerceAtMost(right)
+        val controlY = if (up) y - amplitude * 2f else y + amplitude * 2f
+        builder.quadTo((x + nextX) / 2f, controlY, nextX, y)
+        x = nextX
+        up = !up
+    }
+    return builder.detach()
+}

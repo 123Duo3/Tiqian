@@ -1354,6 +1354,71 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun interlinearLinesGetPerItemSegmentsWithAdjacentShortening() {
+        // 行间线 (ADR 0024): one segment per annotated item, length =
+        // the text's outer frame, hugging the face below the baseline
+        // (+0.18em). 顾炎武|王夫之 are adjacent: each ADJACENT edge pulls
+        // back 1/16em (=1px @16), outer edges stay.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("屈原写下离骚，顾炎武王夫之并称。"),
+                constraints = LayoutConstraints(maxWidth = 224f),
+                decorations = listOf(
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(0, 2),
+                        kind = ink.duo3.tiqian.core.DecorationKind.ProperNoun,
+                    ),
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(4, 6),
+                        kind = ink.duo3.tiqian.core.DecorationKind.BookTitle,
+                    ),
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(7, 10),
+                        kind = ink.duo3.tiqian.core.DecorationKind.ProperNoun,
+                    ),
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(10, 13),
+                        kind = ink.duo3.tiqian.core.DecorationKind.ProperNoun,
+                    ),
+                ),
+            ),
+        )
+
+        val segments = result.debug.decorationSegments
+        assertEquals(4, segments.size)
+        val baseline = result.lines[0].baseline
+        val lineY = baseline + 16f * 0.18f
+
+        val quyuan = segments.single { it.sourceRange.start == 0 }
+        assertEquals("ProperNoun", quyuan.kind)
+        assertEquals(0f, quyuan.left)
+        assertEquals(32f, quyuan.right)
+        assertEquals(lineY, quyuan.top, 0.01f)
+        assertEquals(lineY, quyuan.bottom, 0.01f)
+        assertEquals("InterlinearLinePerAnnotatedItem", quyuan.reason)
+
+        val lisao = segments.single { it.sourceRange.start == 4 }
+        assertEquals("BookTitle", lisao.kind)
+        assertEquals(64f, lisao.left)
+        assertEquals(96f, lisao.right)
+
+        // Adjacent pair: 顾炎武 right edge −1, 王夫之 left edge +1; outer
+        // edges keep the text's outer frame.
+        val guyanwu = segments.single { it.sourceRange.start == 7 }
+        assertEquals(112f, guyanwu.left)
+        assertEquals(159f, guyanwu.right)
+        assertTrue(guyanwu.reason.endsWith("AdjacentInterlinearLineShortening"))
+        val wangfuzhi = segments.single { it.sourceRange.start == 10 }
+        assertEquals(161f, wangfuzhi.left)
+        assertEquals(208f, wangfuzhi.right)
+
+        // 先线后点 holds structurally: the line sits above any emphasis dot
+        // ink (+0.34em); the spacing floor applies (no explicit lineHeight).
+        assertEquals(24f, result.lines[0].bottom - result.lines[0].top)
+    }
+
+    @Test
     fun interlinearMarksRaiseAutoLineHeightToSpacingFloor() {
         // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 着重号
         // present and no explicit lineHeight, line spacing rises to 1/2

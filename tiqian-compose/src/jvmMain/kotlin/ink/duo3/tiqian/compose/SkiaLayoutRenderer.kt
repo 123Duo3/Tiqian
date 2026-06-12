@@ -110,7 +110,9 @@ internal fun DrawScope.drawTiqianLayout(
             }
         }
 
-        // 示亡号 frames (ADR 0018); continuation edges stay undrawn.
+        // Decoration segments (ADR 0018/0024): 示亡号 frames (continuation
+        // edges stay undrawn), 专名号 straight underlines, 书名号甲式 wavy
+        // underlines.
         if (result.debug.decorationSegments.isNotEmpty()) {
             val framePaint = Paint().apply {
                 this.color = color
@@ -118,10 +120,20 @@ internal fun DrawScope.drawTiqianLayout(
                 strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
             }
             for (seg in result.debug.decorationSegments) {
-                skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
-                skCanvas.drawLine(seg.left, seg.bottom, seg.right, seg.bottom, framePaint)
-                if (!seg.openStart) skCanvas.drawLine(seg.left, seg.top, seg.left, seg.bottom, framePaint)
-                if (!seg.openEnd) skCanvas.drawLine(seg.right, seg.top, seg.right, seg.bottom, framePaint)
+                when (seg.kind) {
+                    "ProperNoun" ->
+                        skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
+                    "BookTitle" -> {
+                        val path = ink.duo3.tiqian.shaping.skia.wavyLinePath(seg.left, seg.right, seg.top, fontSize)
+                        skCanvas.drawPath(path, framePaint)
+                    }
+                    else -> {
+                        skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
+                        skCanvas.drawLine(seg.left, seg.bottom, seg.right, seg.bottom, framePaint)
+                        if (!seg.openStart) skCanvas.drawLine(seg.left, seg.top, seg.left, seg.bottom, framePaint)
+                        if (!seg.openEnd) skCanvas.drawLine(seg.right, seg.top, seg.right, seg.bottom, framePaint)
+                    }
+                }
             }
         }
     }
@@ -129,3 +141,4 @@ internal fun DrawScope.drawTiqianLayout(
 
 /** CLREQ 着重号 glyph: U+2022 BULLET (CLREQ allows U+25CF or U+2022). */
 private const val EMPHASIS_DOT = '•'
+

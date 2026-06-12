@@ -1,0 +1,53 @@
+# ADR 0024: 行间线——专名号与书名号甲式
+
+- Status: Accepted
+- Date: 2026-06-13
+
+## Context
+
+CLREQ 行间标点的处理（第五节摘录已入库）：专名号（下划线）、书名号
+甲式（波浪线）合称「行间线」，横排标注于文字下方。规则要点：
+
+- 有几个标注项目就用几条线段，不能从中断开、不能拼接；相邻两个专名
+  必须两条线、断开可辨认；
+- 长度与所标注文字外框一致；相邻时相邻一侧缩短（≤1/8em），另一侧不变；
+- 被标注字距被拉开时，行间线相应延长且不断开；
+- 行间标点尽量紧贴所标注汉字一侧；
+- 与着重号同现时「先线后点」：线贴字，点在线下。
+
+decoration 通道（ADR 0018）已有 span 输入与按行分段几何（示亡号同型）。
+
+## Decision
+
+- `DecorationKind.ProperNoun` / `BookTitle`：行间线两式。几何复用
+  `DecorationSegmentInfo`，线类 `top == bottom == baseline + 0.18em`
+  （字面底 +0.12em 下方一线空气，「紧贴所标注汉字」；着重号点墨水上缘
+  +0.34em——先线后点成立，无需额外机制）。
+- **一项一线**：每个 span 每行一条线段（跨行自然分段，openStart/End
+  仅作 dump 诊断——线没有「开口边」渲染语义）；行内永不拆分。
+- **随字距延长**：线段跟随 justify 后的字位（行间线随拉开的字距延长、
+  不断开），末 cluster 的 trailing justify delta 在线外（长度与文字
+  外框一致）——与示亡号右缘同规则。
+- **`AdjacentInterlinearLineShortening`**：同一行内两条行间线相接
+  （间距 < 0.01em）时，各自相邻一侧回缩 1/16em（可见间隙 1/8em，单侧
+  回缩在 ≤1/8em 上限内），外侧保持文字外框。专名+书名混合相邻同样适用。
+- **断行**：不避拆（与示亡号不同——长专名跨行是常态），跨行各段独立。
+- **行距**：行间线属行间标点，`InterlinearMarkLineSpacingFloor`
+  （ADR 0018 amendment）自动生效。
+- 渲染：专名号直线、书名号甲式波浪线（`wavyLinePath` 下沉到
+  `tiqian-shaping-skia` 与 `shapeTextBlob` 同位；AWT raster 用折线
+  近似）。前端仍零决策——线的位置、长度、缩短全部来自 engine dump。
+
+### 暂不做
+
+- 直排（行间线在文字左侧、与着重号构成双面装）——竖排预研时一并处理；
+  segment 模型只需换轴。
+- 专名号/书名号的语义识别（哪些字是专名）——永远是调用方输入，引擎
+  不做 NER。
+
+## Consequences
+
+- `interlinear-lines` fixture + golden（dump `decobox` 行可见相邻缩短
+  159/161 与 `linespacing` floor）；几何单测覆盖一项一线、贴字 y、
+  相邻侧回缩、外侧不变。
+- gap audit 缺口 7 关闭；第一阶段 audit 列出的缺口全部完成。

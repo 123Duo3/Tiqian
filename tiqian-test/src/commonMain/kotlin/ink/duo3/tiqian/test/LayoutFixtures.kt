@@ -154,6 +154,23 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
+            id = "interlinear-lines",
+            // 屈0原1写2下3离4骚5，6顾7炎8武9王10夫11之12并13称14。15
+            text = "屈原写下离骚，顾炎武王夫之并称。",
+            constraints = LayoutConstraints(maxWidth = 224f),
+            notes = "行间线 (ADR 0024): 专名号 underlines 屈原/顾炎武/王夫之, " +
+                "书名号甲式 wavy line under 离骚. 顾炎武 and 王夫之 are adjacent — " +
+                "AdjacentInterlinearLineShortening pulls each adjacent edge back " +
+                "1/16em so the two marks read separately. No explicit lineHeight: " +
+                "InterlinearMarkLineSpacingFloor raises the line height to 1.5em.",
+            decorations = listOf(
+                DecorationSpan(range = TextRange(0, 2), kind = DecorationKind.ProperNoun),
+                DecorationSpan(range = TextRange(4, 6), kind = DecorationKind.BookTitle),
+                DecorationSpan(range = TextRange(7, 10), kind = DecorationKind.ProperNoun),
+                DecorationSpan(range = TextRange(10, 13), kind = DecorationKind.ProperNoun),
+            ),
+        ),
+        LayoutFixture(
             id = "mourning-frame",
             // 悼0念1：2王3小4明5同6志7、8张9大10同11同12志13。14
             text = "悼念：王小明同志、张大同同志。",
