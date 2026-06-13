@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 18 (按行长自适应禁则档 + 悬挂默认，ADR 0025；附 KinsokuHangingExperimentProbe 实测)
-Up next:        gap audit 第一阶段七缺口全部关闭；更远期：Android composable 渲染、竖排预研、Slice 3 表收口
+Last completed: Slice 3 表收口（最后一条 wip→done）；第一阶段 Slice 0–18 全 done
+Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）；零散 profile 项：GB 固定半宽标点、连续三标点禁则
 ```
 
 ## Slice / Milestone 对照表
@@ -24,7 +24,7 @@ Up next:        gap audit 第一阶段七缺口全部关闭；更远期：Androi
 | 0 | — | 项目骨架、core data model、空 layout pipeline、playground 占位 | `tiqian-test` 现有 fixture | `./gradlew build` + `./gradlew :tiqian-playground:runPlayground` | done |
 | 1 | M1 | 字体 fallback 可解释（CJK 标点优先 CJK；省略号/破折号不被 Latin 接管；Latin word 仍走 Latin） | `中文……English——中文。` | `./gradlew :tiqian-layout:jvmTest` + 检查 dump `font:*` 行 | done |
 | 2 | M1 | RawFontMetrics ↔ LayoutFontMetrics 分离；`CenteredCjkVisual` policy 默认开启 | 任意含汉字 fixture | `./gradlew :tiqian-font:jvmTest`；dump `metrics:*` 行显示 `raw(...)->layout(...)` | done |
-| 3 | M2 | PunctuationAtom（ink/body/leadingGlue/trailingGlue）；行尾标点自然半宽；连续标点挤压；引号 / 括号成对感知 | `中文，中文。` `他说：“你好，世界。”` `中文……中文。` `中文(English)中文` | dump `punct:*` / `spacing:*` / `geom:*` 行；`QuotePairAnalyzerTest` `BracketPairAnalyzerTest` | wip (`PunctuationAtomBuilder` / spacing compression / quote pair / bracket pair / `LineEdgeGlueTrim` / `PunctuationGeometryLedger` / AWT shaped `inkBounds` 校准都 done；剩余平台 adapter 对照与 ink box 可视化) |
+| 3 | M2 | PunctuationAtom（ink/body/leadingGlue/trailingGlue）；行尾标点自然半宽；连续标点挤压；引号 / 括号成对感知 | `中文，中文。` `他说：“你好，世界。”` `中文……中文。` `中文(English)中文` | dump `punct:*` / `spacing:*` / `geom:*` 行；`QuotePairAnalyzerTest`；`AwtSkiaShapingComparisonTest` | done (`PunctuationAtomBuilder` / spacing compression / `QuotePairAnalyzer` / `LineEdgeGlueTrim` / `PunctuationGeometryLedger` / AWT shaped `inkBounds` 校准 + `halt` body 全 done；括号成对感知由分类承担——ASCII 括号→Latin、全宽（）→Opening/Closing，无需独立 analyzer，见 ADR 0004 Follow-up 段；平台 adapter 对照 = `AwtSkiaShapingComparisonTest`（逐标点 advance + ink box 侧）；ink box 可视化在 playground HTML 报告) |
 | 3.5 | — | Explainability hardening：结构化 decision 类型替代 stringly dump；SpacingPlan 替代 advance mutation；classifier 接 profile；可重复标点进 clreq 表；role override 进 dump | 现有所有 fixture 不变 | 所有现有测试绿；`LayoutResult` 暴露结构化 `clusterDecisions / spacingPlan` 字段 | done |
 | 4 | M3 | BreakCandidate / RepairOption；`PushIn` `CarryPrevious`；greedy + lookahead；`Hang` 仅保留 profile opt-in 路径 | `kinsoku-carry-previous` `kinsoku-push-in` `lookahead-future-push-in` `lookahead-avoids-repair` | `./gradlew :tiqian-layout:jvmTest` + `./gradlew :tiqian-playground:runPlayground`；dump `line:*` 行，多行非单 placeholder | done (`PushIn` / `CarryPrevious` / `LeaveRagged` 有结构化 chosen repair + candidates；PushIn 支持全行 capacity 聚合与 zero-shrink merge；CarryPrevious 会验证 carried line 不超宽；lookahead 默认 window 2（`LookaheadWindowProbe` 实测 w3 无增益）；Hang 推到后续 opt-in slice) |
 | 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；`GlueSideAwareJustification`：collapse 不可逆、扩展只在 glue 侧、括号内侧免疫，见 ADR 0004 amendment；WordSpace 待 shaping 分词后启用) |
@@ -53,7 +53,7 @@ Slice 15 的依据（CLREQ 原文）：
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 
-「Slice 3 wip 收尾」的具体待办在 [adr/0004-punctuation-additive-glue-model.md](adr/0004-punctuation-additive-glue-model.md) 的 Follow-up 段。
+Slice 0–18 全部 `done`，第一阶段（CLREQ 简体横排）覆盖收口——gap audit 七缺口 + 自适应默认均落地。下一个大方向（竖排预研 / Android 真渲染）属第二阶段，见「不在第一阶段做的」。
 
 ## 不在第一阶段做的
 
