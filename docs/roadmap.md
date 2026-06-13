@@ -6,7 +6,7 @@
 - `wip` — 有 commit 但还没满足验收清单。
 - `todo` — 还没开始。
 
-中文排版思维约束见 [research/kongque-notes.md](research/kongque-notes.md) 与 [adr/0007-grid-first-explainable-cjk-typography.md](adr/0007-grid-first-explainable-cjk-typography.md)。
+中文排版思维约束见 [research/kongque-notes.md](research/kongque-notes.md) 与 [adr/0007-grid-first-explainable-cjk-typography.md](adr/0007-grid-first-explainable-cjk-typography.md)。禁则档/悬挂随行长的实测见 [research/kinsoku-hanging-line-width-experiment.md](research/kinsoku-hanging-line-width-experiment.md)。
 
 「当前位置」一行用来让任何 agent / 维护者一眼知道下一步该做什么。
 
