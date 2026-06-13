@@ -1354,6 +1354,57 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun kinsokuLevelNoneLeavesForbiddenMarksAtLineStart() {
+        // 不处理 (CLREQ): no line-start prohibition — 。 may begin a line, so
+        // no repair fires even when greedy puts it there.
+        fun engineAt(level: ink.duo3.tiqian.clreq.KinsokuLevel) =
+            ExplainableStubParagraphLayoutEngine(
+                clreqProfileResolver = ClreqProfileResolver {
+                    ClreqProfile.MainlandHorizontal.copy(kinsokuLevel = level)
+                },
+            )
+        val input = LayoutInput(
+            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            content = TiqianTextContent("中文中。中"),
+            constraints = LayoutConstraints(maxWidth = 48f),
+        )
+
+        val none = engineAt(ink.duo3.tiqian.clreq.KinsokuLevel.None).layout(input)
+        assertTrue(none.debug.lineDecisions.all { it.repair == null })
+        // The 。 sits at a line start, untouched.
+        assertTrue(none.lines.any { it.range.start == 3 })
+
+        // Basic (default) repairs it (PushIn/Carry) so no line begins with 。
+        val basic = engineAt(ink.duo3.tiqian.clreq.KinsokuLevel.Basic).layout(input)
+        assertTrue(basic.debug.lineDecisions.any { it.repair != null })
+    }
+
+    @Test
+    fun kinsokuLevelStrictForbidsDashAtLineStart() {
+        // 严格处理 追加破折号不得居行首；基本处理允许.
+        fun layoutAt(level: ink.duo3.tiqian.clreq.KinsokuLevel) =
+            ExplainableStubParagraphLayoutEngine(
+                clreqProfileResolver = ClreqProfileResolver {
+                    ClreqProfile.MainlandHorizontal.copy(kinsokuLevel = level)
+                },
+            ).layout(
+                LayoutInput(
+                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                    content = TiqianTextContent("中文中——文"),
+                    constraints = LayoutConstraints(maxWidth = 48f),
+                ),
+            )
+
+        // Basic: —— (2em dash) may begin a line — no repair.
+        val basic = layoutAt(ink.duo3.tiqian.clreq.KinsokuLevel.Basic)
+        assertTrue(basic.debug.lineDecisions.all { it.repair == null })
+
+        // Strict: the dash is now forbidden at line start → a repair fires.
+        val strict = layoutAt(ink.duo3.tiqian.clreq.KinsokuLevel.Strict)
+        assertTrue(strict.debug.lineDecisions.any { it.repair != null })
+    }
+
+    @Test
     fun hangingPunctuationFillsLineToMeasureAndOverflowsVisual() {
         // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): with the
         // PauseStops style, a 句号 that would land at line start hangs past

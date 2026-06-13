@@ -39,6 +39,14 @@ interface LineBreaker {
          * `maxWidth` instead of pulling a whole character down.
          */
         hangableClusters: Set<Int> = emptySet(),
+        /**
+         * Forbidden-at-line-start cluster indices, resolved by the caller
+         * from the profile's [ink.duo3.tiqian.clreq.KinsokuLevel]. When
+         * non-null this overrides the breaker's own [KinsokuRule] (so the
+         * paragraph engine can carry the profile level); null = fall back to
+         * the injected rule (standalone breaker use / tests).
+         */
+        forbiddenLineStartClusters: Set<Int>? = null,
     ): LineSolution
 }
 
@@ -134,6 +142,7 @@ class GreedyLineBreaker(
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        forbiddenLineStartClusters: Set<Int>?,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -154,6 +163,7 @@ class GreedyLineBreaker(
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            forbiddenLineStartClusters = forbiddenLineStartClusters,
         )
     }
 
@@ -240,6 +250,7 @@ class LookaheadLineBreaker(
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        forbiddenLineStartClusters: Set<Int>?,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -291,6 +302,7 @@ class LookaheadLineBreaker(
                     shrinkOpportunities = shrinkOpportunities,
                     firstLineIndent = firstLineIndent,
                     hangableClusters = hangableClusters,
+                    forbiddenLineStartClusters = forbiddenLineStartClusters,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -319,6 +331,7 @@ class LookaheadLineBreaker(
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            forbiddenLineStartClusters = forbiddenLineStartClusters,
         )
     }
 
@@ -331,6 +344,7 @@ class LookaheadLineBreaker(
         shrinkOpportunities: List<ShrinkOpportunity>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        forbiddenLineStartClusters: Set<Int>?,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -354,6 +368,7 @@ class LookaheadLineBreaker(
             leaveRaggedPenalty = leaveRaggedPenalty,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            forbiddenLineStartClusters = forbiddenLineStartClusters,
         ).lines
 
         val horizon = (1 + futureLineHorizon).coerceAtMost(spliced.size)
@@ -427,6 +442,7 @@ internal fun applyKinsokuRepairs(
     firstLineIndent: Float = 0f,
     hangableClusters: Set<Int> = emptySet(),
     hangPenalty: Int = 5,
+    forbiddenLineStartClusters: Set<Int>? = null,
 ): LineSolution {
     if (initial.size < 2) return LineSolution(initial)
 
@@ -434,8 +450,13 @@ internal fun applyKinsokuRepairs(
     var i = 1
     while (i < mutable.size) {
         val curr = mutable[i]
-        val firstCluster = adjustedClusters[curr.clusterRange.first]
-        if (!kinsoku.forbiddenAtLineStart(firstCluster)) {
+        val firstIndex = curr.clusterRange.first
+        val firstCluster = adjustedClusters[firstIndex]
+        // KinsokuLevel: the engine resolves the forbidden set from the
+        // profile level; standalone breaker use falls back to the rule.
+        val forbidden = forbiddenLineStartClusters?.contains(firstIndex)
+            ?: kinsoku.forbiddenAtLineStart(firstCluster)
+        if (!forbidden) {
             i += 1
             continue
         }

@@ -29,7 +29,12 @@
   `InterlinearMarkLineSpacingFloor` + `ParagraphStyle.printingSides`
   （2026-06-13，ADR 0018 amendment；此前默认行高 1.0em 行距为 0，违例）。
 - **行尾点号悬挂为非默认**：「绝大多数的中文出版物没有悬挂行尾点号的惯例」——
-  ADR 0006 opt-in 立场正确（未实现，见缺口 6）。
+  ADR 0006 opt-in 立场正确（Slice 17 已实现，见缺口 6）。
+- **行首行尾禁则四档**（2026-06-13 补审，初版 audit 漏列）：「可以分为四种
+  级别」不处理 / 基本处理 / GB 法 / 严格处理——`KinsokuLevel` 命名对齐
+  原文，默认基本处理（CLREQ「最推荐」，= 原有行为），逐档收紧分隔号行尾、
+  破折号省略号行首；CLREQ 明示「行首行尾禁则规定属于排版风格……可以选择
+  或者自定义」，故落为 `ClreqProfile.kinsokuLevel` 开关。
 
 ## 缺口（按影响排序）
 

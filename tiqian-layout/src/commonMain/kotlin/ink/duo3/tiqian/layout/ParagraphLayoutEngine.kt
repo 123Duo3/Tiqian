@@ -344,6 +344,12 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalClusters[idx].displayText.singleOrNull() in HANGABLE_PUNCTUATION
             }
         }
+        // 行首禁则按 profile 的 KinsokuLevel 解析（CLREQ 四档）；空集表示
+        // 该档不禁任何字符（不处理档）。
+        val kinsokuRule = ClreqKinsokuRule(clreqProfile.kinsokuLevel)
+        val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
+            kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
+        }
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
         } else {
@@ -359,6 +365,7 @@ class ExplainableStubParagraphLayoutEngine(
                     .filter { it.kind == DecorationKind.Mourning }
                     .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) },
                 hangableClusters = hangableClusters,
+                forbiddenLineStartClusters = forbiddenLineStartClusters,
             )
         }
 

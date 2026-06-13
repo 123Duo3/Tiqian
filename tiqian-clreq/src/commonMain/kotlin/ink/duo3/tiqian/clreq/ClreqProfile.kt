@@ -19,6 +19,11 @@ data class ClreqProfile(
     val autoSpace: AutoSpacePolicy = AutoSpacePolicy.Default,
     val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.forRegion(region),
     val adjustment: AdjustmentStylePolicy = AdjustmentStylePolicy(),
+    /**
+     * 行首行尾禁则档（CLREQ 第六节四档）。默认 [KinsokuLevel.Basic]
+     * ——CLREQ 标注的「最推荐」档。
+     */
+    val kinsokuLevel: KinsokuLevel = KinsokuLevel.Basic,
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -222,6 +227,23 @@ enum class LineEndPunctuationStyle {
     AllowFullWidth,
 }
 
+/**
+ * CLREQ 第六节「行首行尾禁则」四档（逐档收紧）。命名对齐 CLREQ 原文：
+ *
+ * - [None]（不处理）——完全不处理行首行尾禁则。常见于台港报刊。
+ * - [Basic]（基本处理）——点号、结束引号/括号/书名号乙式、连接号、
+ *   间隔号、分隔号不得居行首；开始引号/括号/书名号乙式不得居行尾。
+ *   CLREQ「这是最推荐的方法」，本项目默认。
+ * - [GbStyle]（GB 法）——在基本处理上追加：分隔号也不得居行尾。
+ * - [Strict]（严格处理）——在 GB 法上追加：破折号、省略号不得居行首。
+ */
+enum class KinsokuLevel {
+    None,
+    Basic,
+    GbStyle,
+    Strict,
+}
+
 enum class HangingPunctuationStyle {
     /** 不悬挂（默认）：行尾点号走挤进/推出修复链。 */
     Disabled,
@@ -318,19 +340,54 @@ object ClreqPunctuationPolicies {
         val punctuationClass = classify(char)
         return PunctuationPolicy(
             punctuationClass = punctuationClass,
-            // CLREQ forbids 点号 / closing marks / centred separators at line
-            // start, but Dash and Ellipsis are only protected from being
-            // SPLIT（「破折号/省略号不得以适配分行之由断开或拆至两行」）—
-            // starting a line with —— is legitimate (dialogue dashes do it
-            // by construction). See clreq-punctuation-audit.md.
-            allowAtLineStart = punctuationClass == PunctuationClass.Opening ||
-                punctuationClass == PunctuationClass.Other ||
-                punctuationClass == PunctuationClass.Dash ||
-                punctuationClass == PunctuationClass.Ellipsis,
-            allowAtLineEnd = punctuationClass != PunctuationClass.Opening,
+            // The boolean fields hold the CLREQ 基本处理 (Basic) level —
+            // the「最推荐」default. KinsokuLevel applies deltas on top
+            // (see forbiddenAtLineStart/End below).
+            allowAtLineStart = !forbiddenAtLineStart(char, KinsokuLevel.Basic),
+            allowAtLineEnd = !forbiddenAtLineEnd(char, KinsokuLevel.Basic),
             defaultBodyEm = char.defaultPunctuationBodyEm(punctuationClass),
             defaultAdvanceEm = char.defaultPunctuationAdvanceEm(punctuationClass),
         )
+    }
+
+    /**
+     * 行首行尾禁则，按 CLREQ 第六节四档（[KinsokuLevel]）逐档收紧。CLREQ:
+     * 「行首行尾禁则规定属于排版风格，用户代理实现时可以根据自身实际情况，
+     * 选择或者自定义……更宽松或者严格的禁则」。
+     *
+     * 破折号/省略号在 基本处理 / GB 法 下**不**禁于行首——它们只被保护
+     * 不被拆行（见 clreq-punctuation-audit.md），对话破折号本就以行首
+     * 开头；只有 严格处理 才追加此禁则。
+     */
+    fun forbiddenAtLineStart(char: Char, level: KinsokuLevel): Boolean {
+        if (level == KinsokuLevel.None) return false
+        return when (classify(char)) {
+            // 点号、结束引号/括号/书名号乙式、连接号、间隔号、分隔号.
+            PunctuationClass.PauseOrStop,
+            PunctuationClass.Closing,
+            PunctuationClass.Quote,
+            PunctuationClass.Connector,
+            PunctuationClass.MiddleDot,
+            PunctuationClass.Interpunct,
+            PunctuationClass.Solidus,
+            -> true
+            // 破折号、省略号：仅 严格处理 追加禁于行首.
+            PunctuationClass.Dash,
+            PunctuationClass.Ellipsis,
+            -> level == KinsokuLevel.Strict
+            else -> false
+        }
+    }
+
+    fun forbiddenAtLineEnd(char: Char, level: KinsokuLevel): Boolean {
+        if (level == KinsokuLevel.None) return false
+        return when (classify(char)) {
+            // 开始引号/括号/书名号乙式.
+            PunctuationClass.Opening -> true
+            // 分隔号：GB 法 / 严格处理 追加禁于行尾.
+            PunctuationClass.Solidus -> level != KinsokuLevel.Basic
+            else -> false
+        }
     }
 
     private fun Char.defaultPunctuationBodyEm(punctuationClass: PunctuationClass): Float =
