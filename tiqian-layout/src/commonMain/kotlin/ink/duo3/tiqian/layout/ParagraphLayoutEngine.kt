@@ -355,10 +355,13 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalClusters[idx].displayText.singleOrNull() in HANGABLE_PUNCTUATION
             }
         }
-        // 行首禁则按解析出的 KinsokuLevel（CLREQ 四档）；空集 = 不处理档.
+        // 行首/行尾禁则按解析出的 KinsokuLevel（CLREQ 四档）；空集 = 不处理档.
         val kinsokuRule = ClreqKinsokuRule(resolvedKinsoku.level)
         val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
+        }
+        val forbiddenLineEndClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
+            kinsokuRule.forbiddenAtLineEnd(naturalClusters[idx])
         }
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
@@ -376,6 +379,7 @@ class ExplainableStubParagraphLayoutEngine(
                     .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) },
                 hangableClusters = hangableClusters,
                 forbiddenLineStartClusters = forbiddenLineStartClusters,
+                forbiddenLineEndClusters = forbiddenLineEndClusters,
             )
         }
 
@@ -1289,6 +1293,14 @@ class ExplainableStubParagraphLayoutEngine(
                 reasonCode = "ForbiddenAtLineStart",
                 offenderRange = clusters[offenderClusterIndex].range,
                 penalty = penalty,
+            )
+
+            is RepairOption.CarryNext -> LineRepairDecisionInfo(
+                kind = "CarryNext",
+                reasonCode = "ForbiddenAtLineEnd",
+                offenderRange = clusters[movedClusterIndex].range,
+                penalty = penalty,
+                carriedClusterIndex = movedClusterIndex,
             )
         }
 

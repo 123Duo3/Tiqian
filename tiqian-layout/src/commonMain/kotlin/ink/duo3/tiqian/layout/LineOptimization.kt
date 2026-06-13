@@ -46,6 +46,18 @@ sealed interface RepairOption {
         val carriedClusterIndex: Int,
     ) : RepairOption
 
+    /**
+     * CLREQ 行尾禁则: a forbidden-at-line-end mark (开引号/开括号; GB·严格
+     * 追加分隔号) at the line's end is moved to the NEXT line's start. The
+     * break retreats past it — only the current line shortens, so no
+     * overflow cascade. [movedClusterIndex] is the mark moved down.
+     */
+    data class CarryNext(
+        override val penalty: Int,
+        override val reason: String,
+        val movedClusterIndex: Int,
+    ) : RepairOption
+
     data class LeaveRagged(
         override val penalty: Int,
         override val reason: String,

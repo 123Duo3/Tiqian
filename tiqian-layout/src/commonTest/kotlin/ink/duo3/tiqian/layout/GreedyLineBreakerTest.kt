@@ -315,6 +315,54 @@ class GreedyLineBreakerTest {
         assertEquals(true, solution.lines[0].repair is RepairOption.PushIn)
     }
 
+    @Test
+    fun retreatsBreakSoLineDoesNotEndOnOpeningMark() {
+        // 中中（中中 maxWidth=48: greedy fills 中中（ (48), 中 overflows. The
+        // line would END on （ (forbidden at line end) → break retreats to
+        // 中中, the （ moves to the next line's start (cascade-free).
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "中", 16f),
+            cluster(2, 3, "（", 16f),
+            cluster(3, 4, "中", 16f),
+            cluster(4, 5, "中", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 48f,
+            forbiddenLineEndClusters = setOf(2),
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(2..4, solution.lines[1].clusterRange)
+        val repair = solution.lines[0].repair
+        assertEquals(true, repair is RepairOption.CarryNext)
+        repair as RepairOption.CarryNext
+        assertEquals(2, repair.movedClusterIndex)
+    }
+
+    @Test
+    fun keepsOpenerAtLineEndWhenItIsTheLineSoleCluster() {
+        // （中中中 maxWidth=16: greedy line 0 = （ alone (next overflows).
+        // Retreating would empty the line → the violation is kept (no
+        // infinite shorten), 中 starts line 1.
+        val clusters = listOf(
+            cluster(0, 1, "（", 16f),
+            cluster(1, 2, "中", 16f),
+            cluster(2, 3, "中", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 16f,
+            forbiddenLineEndClusters = setOf(0),
+        )
+        assertEquals(0..0, solution.lines[0].clusterRange)
+        assertEquals(null, solution.lines[0].repair)
+    }
+
     private fun cluster(start: Int, end: Int, text: String, advance: Float): Cluster =
         Cluster(
             range = TextRange(start, end),

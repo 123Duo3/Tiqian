@@ -1419,6 +1419,30 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun lineEndKinsokuMovesDanglingOpenerToNextLine() {
+        // CLREQ 行尾禁则 (Basic): 开括号不得居行尾. 中中中（中中）中 @maxWidth
+        // 64: greedy would end line 0 on （ — the engine derives the
+        // forbidden-end set from the kinsoku level and retreats the break so
+        // （ starts line 1. No line ends on an opener.
+        val result = fixedBasicEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中中中（中中）中"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+
+        for (line in result.lines) {
+            val lastCluster = result.clusters.last { it.range.end <= line.range.end }
+            assertTrue(
+                lastCluster.text != "（",
+                "line must not end on 开括号: ${result.clusters}",
+            )
+        }
+        assertTrue(result.debug.lineDecisions.any { it.repair == "CarryNext" })
+    }
+
+    @Test
     fun hangingPunctuationFillsLineToMeasureAndOverflowsVisual() {
         // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): with the
         // PauseStops style, a 句号 that would land at line start hangs past

@@ -47,7 +47,31 @@ interface LineBreaker {
          * the injected rule (standalone breaker use / tests).
          */
         forbiddenLineStartClusters: Set<Int>? = null,
+        /**
+         * Forbidden-at-line-END cluster indices (开引号/开括号; GB·严格 的
+         * 分隔号). A break that would end a line on one of these retreats
+         * (`adjustBreakForLineEnd`), moving the mark to the next line's
+         * start — recorded as [RepairOption.CarryNext]. Empty/null = no
+         * line-end prohibition (e.g. KinsokuLevel.None).
+         */
+        forbiddenLineEndClusters: Set<Int> = emptySet(),
     ): LineSolution
+}
+
+/**
+ * CLREQ 行尾禁则 break retreat: returns a break ≤ [breakAt] such that the
+ * line `[lineStart, result)` does not end on a forbidden-at-line-end mark.
+ * Retreats past consecutive trailing marks; never empties the line (keeps
+ * ≥1 cluster), so the rare all-forbidden tail keeps the violation.
+ */
+internal fun adjustBreakForLineEnd(
+    breakAt: Int,
+    lineStart: Int,
+    forbiddenLineEndClusters: Set<Int>,
+): Int {
+    var b = breakAt
+    while (b - 1 > lineStart && (b - 1) in forbiddenLineEndClusters) b -= 1
+    return b
 }
 
 /** Usable measure of a line starting at [lineStartCluster] (段首缩进). */
@@ -143,13 +167,17 @@ class GreedyLineBreaker(
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
         forbiddenLineStartClusters: Set<Int>?,
+        forbiddenLineEndClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
             "naturalClusters and adjustedClusters must align cluster-for-cluster."
         }
 
-        val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth, unbreakableRanges, firstLineIndent)
+        val greedy = greedyFill(
+            naturalClusters, adjustedClusters, maxWidth, unbreakableRanges,
+            firstLineIndent, forbiddenLineEndClusters,
+        )
         return applyKinsokuRepairs(
             initial = greedy,
             naturalClusters = naturalClusters,
@@ -173,6 +201,7 @@ class GreedyLineBreaker(
         maxWidth: Float,
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
+        forbiddenLineEndClusters: Set<Int>,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
@@ -184,11 +213,10 @@ class GreedyLineBreaker(
             val nextAdjusted = adjustedAccum + adjustedClusters[i].advance
             val overflows = nextAdjusted > lineLimit(maxWidth, firstLineIndent, lineStart) && i > lineStart
             if (overflows) {
-                val breakAt = adjustBreakForUnbreakables(i, lineStart, unbreakableRanges)
-                lines += rebuildLine(
-                    clusterRange = lineStart..(breakAt - 1),
-                    naturalClusters = naturalClusters,
-                    adjustedClusters = adjustedClusters,
+                val afterUnbreak = adjustBreakForUnbreakables(i, lineStart, unbreakableRanges)
+                val breakAt = adjustBreakForLineEnd(afterUnbreak, lineStart, forbiddenLineEndClusters)
+                lines += closeFilledLine(
+                    lineStart..(breakAt - 1), afterUnbreak, naturalClusters, adjustedClusters,
                 )
                 lineStart = breakAt
                 adjustedAccum = adjustedClusters[breakAt].advance
@@ -209,6 +237,29 @@ class GreedyLineBreaker(
         return lines
     }
 
+}
+
+/**
+ * Builds a line for [range]; if the break retreated from [naturalBreakAt]
+ * (line-end kinsoku), records [RepairOption.CarryNext] for the mark(s) moved
+ * to the next line.
+ */
+internal fun closeFilledLine(
+    range: IntRange,
+    naturalBreakAt: Int,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+): LineCandidate {
+    val line = rebuildLine(range, naturalClusters, adjustedClusters)
+    if (range.last + 1 == naturalBreakAt) return line
+    val moved = range.last + 1
+    return line.copy(
+        repair = RepairOption.CarryNext(
+            penalty = 0,
+            reason = "ForbiddenAtLineEnd:${adjustedClusters[moved].text}:moved-to-next-line",
+            movedClusterIndex = moved,
+        ),
+    )
 }
 
 /**
@@ -251,6 +302,7 @@ class LookaheadLineBreaker(
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
         forbiddenLineStartClusters: Set<Int>?,
+        forbiddenLineEndClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -262,6 +314,9 @@ class LookaheadLineBreaker(
         val committed = mutableListOf<LineCandidate>()
         var lineStart = 0
         while (lineStart < adjustedClusters.size) {
+            // Line-end retreat is applied at commit (below), not here, so the
+            // chosen break's pre-retreat position is known and CarryNext can
+            // be labelled.
             val greedyEnd = adjustBreakForUnbreakables(
                 breakAt = findGreedyEnd(
                     adjustedClusters,
@@ -310,12 +365,13 @@ class LookaheadLineBreaker(
                 }
             }
 
-            committed += rebuildLine(
-                lineStart..(bestEnd - 1),
-                naturalClusters,
-                adjustedClusters,
+            // Line-end kinsoku may retreat the chosen break further; the
+            // mark moves to the next line (cascade-free shorten).
+            val committedEnd = adjustBreakForLineEnd(bestEnd, lineStart, forbiddenLineEndClusters)
+            committed += closeFilledLine(
+                lineStart..(committedEnd - 1), bestEnd, naturalClusters, adjustedClusters,
             )
-            lineStart = bestEnd
+            lineStart = committedEnd
         }
 
         return applyKinsokuRepairs(

@@ -165,6 +165,17 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
+            id = "line-end-kinsoku",
+            // 中0文1中2文3（4中5文6）7中8文9
+            text = "中文中文（中文）中文",
+            constraints = LayoutConstraints(maxWidth = 80f),
+            notes = "CLREQ 行尾禁则 (Basic): 开括号不得居行尾. maxWidth 80 (5字) " +
+                "would end line 0 on （ — the break retreats so （ starts line 1 " +
+                "(CarryNext, cascade-free). Pinned Fixed(Basic) so the measure " +
+                "doesn't auto-escalate.",
+            pinBasicNoHang = true,
+        ),
+        LayoutFixture(
             id = "interlinear-lines",
             // 屈0原1写2下3离4骚5，6顾7炎8武9王10夫11之12并13称14。15
             text = "屈原写下离骚，顾炎武王夫之并称。",
