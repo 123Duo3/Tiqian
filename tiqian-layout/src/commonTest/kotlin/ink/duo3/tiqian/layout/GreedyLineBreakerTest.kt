@@ -235,6 +235,86 @@ class GreedyLineBreakerTest {
         }
     }
 
+    @Test
+    fun hangsPauseStopPastMeasureWhenEnabledAndPushInCannotFit() {
+        // a,b,c,d,。 maxWidth=64: greedy = [a b c d](64), [。]. PushIn needs
+        // 16 but 。 carries no shrink opportunity here → with hanging enabled
+        // 。 hangs at the end of line 0 (beyond the measure) instead of
+        // CarryPrevious pulling d down.
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "d", 16f),
+            cluster(4, 5, "。", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 64f,
+            hangableClusters = setOf(4),
+        )
+
+        assertEquals(1, solution.lines.size)
+        val line = solution.lines.single()
+        assertEquals(0..4, line.clusterRange)
+        assertEquals(4, line.hangingClusterIndex)
+        // Measure-fill width excludes the hung mark (content a b c d = 64).
+        assertEquals(64f, line.adjustedWidth)
+        val repair = line.repair
+        assertEquals(true, repair is RepairOption.Hang)
+        repair as RepairOption.Hang
+        assertEquals(4, repair.offenderClusterIndex)
+        val candidate = line.repairCandidates.single { it.kind == "Hang" }
+        assertEquals(true, candidate.accepted)
+    }
+
+    @Test
+    fun doesNotHangWhenDisabled() {
+        // Same shape, hanging off (empty set) → CarryPrevious pulls d down.
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "d", 16f),
+            cluster(4, 5, "。", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 64f,
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(null, solution.lines[0].hangingClusterIndex)
+        assertEquals(true, solution.lines[1].repair is RepairOption.CarryPrevious)
+    }
+
+    @Test
+    fun pushInStillPreferredOverHangWhenGlueCovers() {
+        // 。 carries trailing-glue capacity ≥ overflow → PushIn keeps it in
+        // the measure; hanging is the fallback, not the first choice.
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "。", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 60f,
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+            ),
+            hangableClusters = setOf(3),
+        )
+
+        assertEquals(1, solution.lines.size)
+        assertEquals(null, solution.lines[0].hangingClusterIndex)
+        assertEquals(true, solution.lines[0].repair is RepairOption.PushIn)
+    }
+
     private fun cluster(start: Int, end: Int, text: String, advance: Float): Cluster =
         Cluster(
             range = TextRange(start, end),

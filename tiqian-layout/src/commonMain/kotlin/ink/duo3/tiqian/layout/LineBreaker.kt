@@ -31,6 +31,14 @@ interface LineBreaker {
          * other lines use the full [maxWidth].
          */
         firstLineIndent: Float = 0f,
+        /**
+         * `LineEndHangingPunctuation` (CLREQ 行尾点号悬挂, ADR 0006): cluster
+         * indices of 顿/逗/句 that MAY hang past the measure when they would
+         * otherwise land at line start. Empty = disabled (default). Tried
+         * after PushIn, before CarryPrevious — the hung mark sits beyond
+         * `maxWidth` instead of pulling a whole character down.
+         */
+        hangableClusters: Set<Int> = emptySet(),
     ): LineSolution
 }
 
@@ -125,6 +133,7 @@ class GreedyLineBreaker(
         shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
+        hangableClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -144,6 +153,7 @@ class GreedyLineBreaker(
             leaveRaggedPenalty = leaveRaggedPenalty,
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
+            hangableClusters = hangableClusters,
         )
     }
 
@@ -229,6 +239,7 @@ class LookaheadLineBreaker(
         shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
+        hangableClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -279,6 +290,7 @@ class LookaheadLineBreaker(
                     maxWidth = maxWidth,
                     shrinkOpportunities = shrinkOpportunities,
                     firstLineIndent = firstLineIndent,
+                    hangableClusters = hangableClusters,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -306,6 +318,7 @@ class LookaheadLineBreaker(
             leaveRaggedPenalty = leaveRaggedPenalty,
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
+            hangableClusters = hangableClusters,
         )
     }
 
@@ -317,6 +330,7 @@ class LookaheadLineBreaker(
         maxWidth: Float,
         shrinkOpportunities: List<ShrinkOpportunity>,
         firstLineIndent: Float,
+        hangableClusters: Set<Int>,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -339,6 +353,7 @@ class LookaheadLineBreaker(
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
             firstLineIndent = firstLineIndent,
+            hangableClusters = hangableClusters,
         ).lines
 
         val horizon = (1 + futureLineHorizon).coerceAtMost(spliced.size)
@@ -410,6 +425,8 @@ internal fun applyKinsokuRepairs(
     leaveRaggedPenalty: Int,
     unbreakableRanges: List<IntRange> = emptyList(),
     firstLineIndent: Float = 0f,
+    hangableClusters: Set<Int> = emptySet(),
+    hangPenalty: Int = 5,
 ): LineSolution {
     if (initial.size < 2) return LineSolution(initial)
 
@@ -443,6 +460,53 @@ internal fun applyKinsokuRepairs(
                 mutable.removeAt(i)
             } else {
                 mutable[i] = pushIn.current
+                continue
+            }
+            continue
+        }
+
+        // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): when
+        // PushIn cannot fit the 顿/逗/句 offender, hang it past the measure
+        // on the previous line instead of carrying a whole character down.
+        // 行尾只悬挂一个 — never chain onto a line that already hangs.
+        val offenderIndex = curr.clusterRange.first
+        if (offenderIndex in hangableClusters && prev.hangingClusterIndex == null) {
+            val hangCandidate = RepairCandidate(
+                kind = "Hang",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = offenderIndex,
+                penalty = hangPenalty,
+                accepted = true,
+            )
+            repairCandidates += hangCandidate
+            val mergedRange = prev.clusterRange.first..offenderIndex
+            mutable[i - 1] = LineCandidate(
+                clusterRange = mergedRange,
+                sourceRange = TextRange(
+                    adjustedClusters[mergedRange.first].range.start,
+                    adjustedClusters[offenderIndex].range.end,
+                ),
+                // The hung mark sits BEYOND the measure: it is excluded from
+                // the line's measure-fill width (content fills to maxWidth,
+                // the mark overflows).
+                naturalWidth = prev.naturalWidth + naturalClusters[offenderIndex].advance,
+                adjustedWidth = prev.adjustedWidth,
+                repair = RepairOption.Hang(
+                    penalty = hangPenalty,
+                    reason = "ForbiddenAtLineStart:${firstCluster.text}:hang",
+                    offenderClusterIndex = offenderIndex,
+                ),
+                repairCandidates = prev.repairCandidates + pushIn.candidate + hangCandidate,
+                hangingClusterIndex = offenderIndex,
+            )
+            if (offenderIndex == curr.clusterRange.last) {
+                mutable.removeAt(i)
+            } else {
+                mutable[i] = rebuildLine(
+                    (offenderIndex + 1)..curr.clusterRange.last,
+                    naturalClusters,
+                    adjustedClusters,
+                )
                 continue
             }
             continue

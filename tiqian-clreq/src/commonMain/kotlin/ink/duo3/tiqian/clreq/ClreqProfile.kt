@@ -208,11 +208,29 @@ data class AdjustmentStylePolicy(
      * 也不参与 justify 的 CjkLatinSpace 拉伸档。
      */
     val allowSinoWesternGapAdjustment: Boolean = true,
+    /**
+     * CLREQ 行尾点号悬挂（`LineEndHangingPunctuation`）：当顿号/逗号/句号
+     * 将落到行首时，允许把它悬挂到前一行行尾、突出版心，而非挤进或推出。
+     * 「绝大多数的中文出版物没有悬挂行尾点号的惯例」→ 默认关闭。窄行宽下
+     * （如手机正文）悬挂可避免 CarryPrevious 拉走整字造成的大幅字距拉宽。
+     */
+    val hangingPunctuation: HangingPunctuationStyle = HangingPunctuationStyle.Disabled,
 )
 
 enum class LineEndPunctuationStyle {
     ForceHalfWidth,
     AllowFullWidth,
+}
+
+enum class HangingPunctuationStyle {
+    /** 不悬挂（默认）：行尾点号走挤进/推出修复链。 */
+    Disabled,
+
+    /**
+     * 悬挂顿号、逗号、句号（CLREQ「适合行尾悬挂的标点符号有顿号、逗号及
+     * 句号」）。行尾只悬挂一个。
+     */
+    PauseStops,
 }
 
 /**

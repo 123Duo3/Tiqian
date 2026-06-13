@@ -68,6 +68,13 @@ data class LineCandidate(
     val adjustedWidth: Float,
     val repair: RepairOption? = null,
     val repairCandidates: List<RepairCandidate> = emptyList(),
+    /**
+     * `LineEndHangingPunctuation`: when set, this cluster (the line's last)
+     * hangs past the measure — it is excluded from the line's measure-fill
+     * width so justification fills the content to `maxWidth` and the mark
+     * sits beyond (突出版心). Null on non-hanging lines.
+     */
+    val hangingClusterIndex: Int? = null,
 )
 
 data class RepairCandidate(

@@ -1354,6 +1354,52 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun hangingPunctuationFillsLineToMeasureAndOverflowsVisual() {
+        // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): with the
+        // PauseStops style, a 句号 that would land at line start hangs past
+        // the measure. 中文中文，中文。 @maxWidth 64: the first 逗号 hangs at
+        // line 0 end — content (中文中文 = 64) fills the measure exactly,
+        // visualWidth overflows by the hung mark's half-width.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
+                        hangingPunctuation = ink.duo3.tiqian.clreq.HangingPunctuationStyle.PauseStops,
+                    ),
+                )
+            },
+        )
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文中文，中文。"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+
+        assertTrue(result.lines.size >= 2)
+        val line0 = result.lines[0]
+        // The 逗号 (index 4) is on line 0, hanging.
+        assertEquals(0, line0.range.start)
+        assertEquals(5, line0.range.end)
+        // Content fills the measure; the hung mark overflows it.
+        assertEquals(64f, line0.adjustedWidth)
+        assertTrue(line0.visualWidth > 64f, "hung mark must overflow: ${line0.visualWidth}")
+        assertEquals("Hang", result.debug.lineDecisions[0].repair)
+
+        // Disabled (default) → no hang; the 逗号 wraps via CarryPrevious.
+        val plain = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文中文，中文。"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+        assertTrue(plain.lines.none { it.visualWidth > 64f })
+        assertTrue(plain.debug.lineDecisions.none { it.repair == "Hang" })
+    }
+
+    @Test
     fun interlinearLinesGetPerItemSegmentsWithAdjacentShortening() {
         // 行间线 (ADR 0024): one segment per annotated item, length =
         // the text's outer frame, hugging the face below the baseline

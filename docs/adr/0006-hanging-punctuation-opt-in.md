@@ -64,6 +64,32 @@ data class ClreqProfile(
 - roadmap 中凡是写 `PushIn / Hang` 的地方，应拆开：PushIn 是当前默认 kinsoku 收尾；Hang 是后续 profile opt-in 能力。
 - 文档层面：roadmap、ADR 0004 「Slice 3 收尾」段、ParagraphLayoutEngine 注释里所有提到 `Hang` 的位置都需要标注「opt-in via profile」。
 
+## Amendment (2026-06-13): Hang 落地实现（Slice 17）
+
+ADR 立场（默认关、opt-in、限点号、不与 justify 双账）落为实现：
+
+- 开关挂在 `AdjustmentStylePolicy.hangingPunctuation`：`Disabled`（默认）
+  / `PauseStops`（顿、逗、句——CLREQ「适合行尾悬挂的标点符号有顿号、
+  逗号及句号」）。本 ADR 早先草拟的 `HangingPunctuationPolicy`
+  三档枚举收敛为两档；简体扩展范围（其余标点也可悬挂）留作后续档位。
+- **`LineEndHangingPunctuation`** 进 kinsoku 修复链，顺序
+  **PushIn → Hang → CarryPrevious → LeaveRagged**：先挤进（最不扰动，
+  全留版心内），挤不下才悬挂（避免 CarryPrevious 拉走整字造成的大幅
+  字距重摊——thetype 与窄行宽场景的核心收益），penalty 5（介于
+  PushIn 2 与 Carry 10）。lookahead 评分用同一链，保持一致。
+- **不与 justify 双账**（ADR 决策④）：悬挂 cluster 从行的 measure-fill
+  宽度中**排除**——justify 把内容填满到 `maxWidth`，悬挂标点坐落版心
+  外（`LineBox.adjustedWidth == maxWidth`，`visualWidth > maxWidth`）。
+  渲染层零改动：cluster 仍在行 range 内、按 advance 照画，自然落到
+  版心外。
+- **行尾只悬挂一个**：链上从不在已悬挂的行再叠悬挂（`hangingClusterIndex
+  != null` 守卫）。
+- 行尾标点削半（`consumeLineEdgeGlue`）对悬挂标点照常生效——悬挂的是
+  半宽点号，与「严格风格行尾半宽」前提（ADR 决策⑤）一致。
+
+未做：简体扩展悬挂范围、连续标点（第二个及其后）的悬挂、grid 对齐下
+与悬挂配合的禁则（CLREQ 纵横对齐节，竖排预研时一并）。
+
 ## Alternatives considered
 
 - **默认开启句号、逗号悬挂（参照 InDesign 默认）**。否决：项目目标是把规则写进 profile + ADR，而不是「跟随主流工具默认」。允许用户选这个语义，但不替用户决定。

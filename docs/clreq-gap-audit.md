@@ -85,13 +85,19 @@ CLREQ 挤压顺序：①行末标点固定半宽 →②西文词距 →1/4em →
 行宽收窄 + `LineBox.indent` 渲染偏移。开括号半宽缩减不需要实现——加法
 模型的行首 leading glue trim（ADR 0010）已天然给出该行为。
 
-### 6. 行尾点号悬挂（opt-in，ADR 0006 预留未实现）
+### 6. 行尾点号悬挂——已解决（Slice 17，ADR 0006 amendment）
 
 > 「行尾只可悬挂一个标点符号；适合行尾悬挂的标点符号有顿号、逗号及句号。
 > 简体中文排版中，其余标点符号因其字面分布偏向被标注文字的一侧，也可进行
 > 行尾悬挂配置。」
 
 实现时的细则已齐：限一个、顿逗句优先、简体可扩大范围。
+
+已实现：`AdjustmentStylePolicy.hangingPunctuation` 默认 `Disabled` /
+`PauseStops`（顿逗句）；`LineEndHangingPunctuation` 在 kinsoku 链中排
+PushIn 之后、CarryPrevious 之前；悬挂标点排除出 measure-fill（内容满排
+版心、标点出版心），行尾只挂一个；窄行宽（手机正文）下避免 Carry 整字
+的大幅字距重摊。简体扩大范围、连续标点悬挂留作后续。
 
 ### 7. 行间线：专名号与书名号甲式（波浪线）——已解决（Slice 16，ADR 0024）
 
@@ -117,8 +123,8 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
   grid-first 哲学的完整形态，远期。
 - **三个以上标点连续**时禁则的特殊处理（CLREQ 提及，未细查）。
 
-## 建议切片
+## 状态
 
-1 + 2 同属「中西混排正确性」（Insert gap 小、词距大，可分两个 slice，
-Insert 先行）；3 是一次 ADR 级拍板；4 自然挂在 2 之后（词距是挤压档之一）；
-5 独立小 slice；6、7 各一个 slice（7 复用 decoration 通道）。
+缺口 1–7 全部已解决（Slice 10–17）。剩下的只有「8 杂项（audit 级）」里
+的 GB 固定半宽、四字省略号、grid 对齐、连续标点禁则——均为风格选项或
+远期项，不在第一阶段主线。

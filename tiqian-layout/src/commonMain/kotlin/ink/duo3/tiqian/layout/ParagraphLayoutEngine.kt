@@ -5,6 +5,7 @@ import ink.duo3.tiqian.clreq.AutoSpacePolicy
 import ink.duo3.tiqian.clreq.BuiltInClreqProfileResolver
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.ClreqProfileResolver
+import ink.duo3.tiqian.clreq.HangingPunctuationStyle
 import ink.duo3.tiqian.clreq.LineEndPunctuationStyle
 import ink.duo3.tiqian.clreq.PunctuationClass
 import ink.duo3.tiqian.clreq.PunctuationGluePlacement
@@ -335,6 +336,14 @@ class ExplainableStubParagraphLayoutEngine(
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
+        // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): which
+        // clusters may hang past the measure. Opt-in; 顿/逗/句 only.
+        val hangableClusters: Set<Int> = when (adjustmentStyle.hangingPunctuation) {
+            HangingPunctuationStyle.Disabled -> emptySet()
+            HangingPunctuationStyle.PauseStops -> naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
+                naturalClusters[idx].displayText.singleOrNull() in HANGABLE_PUNCTUATION
+            }
+        }
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
         } else {
@@ -349,6 +358,7 @@ class ExplainableStubParagraphLayoutEngine(
                 unbreakableRanges = input.decorations
                     .filter { it.kind == DecorationKind.Mourning }
                     .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) },
+                hangableClusters = hangableClusters,
             )
         }
 
@@ -459,10 +469,17 @@ class ExplainableStubParagraphLayoutEngine(
             if (isLast) {
                 null
             } else {
+                // A hung mark sits beyond the measure: justify fills the
+                // CONTENT (range minus the hanging mark) to maxWidth.
+                val justifyRange = if (lineCandidate.hangingClusterIndex != null) {
+                    lineCandidate.clusterRange.first until lineCandidate.clusterRange.last
+                } else {
+                    lineCandidate.clusterRange
+                }
                 justifier.justify(
                     adjustedClusters = trimmedClusters,
                     clusterRoles = clusterRoles,
-                    lineClusterRange = lineCandidate.clusterRange,
+                    lineClusterRange = justifyRange,
                     maxWidth = if (lineCandidate.clusterRange.first == 0) {
                         input.constraints.maxWidth - firstLineIndent
                     } else {
@@ -504,7 +521,15 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
-            val adjustedWidth = lineCandidate.clusterRange
+            // LineEndHangingPunctuation: the hung mark is excluded from the
+            // measure-fill width (adjustedWidth) but kept in visualWidth —
+            // it overflows the measure (突出版心).
+            val fillRange = if (lineCandidate.hangingClusterIndex != null) {
+                lineCandidate.clusterRange.first until lineCandidate.clusterRange.last
+            } else {
+                lineCandidate.clusterRange
+            }
+            val adjustedWidth = fillRange
                 .sumOf { trimmedClusters[it].advance.toDouble() }
                 .toFloat()
             val visualWidth = lineCandidate.clusterRange
@@ -1574,6 +1599,9 @@ private const val WORD_SPACE_MIN_EM = 0.25f
 
 /** CLREQ 挤压⑥：行内中西间距「最小挤为八分之一汉字宽」. */
 private const val SINO_WESTERN_GAP_MIN_EM = 0.125f
+
+/** CLREQ 行尾悬挂适配标点：顿号、逗号、句号. */
+private val HANGABLE_PUNCTUATION = setOf('、', '，', '。')
 
 /** CLREQ 挤压第④档对象：「位于行内的句号、问号、感叹号」. */
 private val INLINE_STOPS = setOf('。', '！', '？', '．')
