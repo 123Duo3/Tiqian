@@ -1466,6 +1466,15 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun shortHyphenConnectorIsHalfWidthWavyTildeFullWidth() {
+        // CLREQ 5.1.6: 短横线（–, U+2013）占半个字位置；浪纹线（～, U+FF5E）
+        // 占一字。Both classify as Connector but differ in width.
+        val full = ink.duo3.tiqian.clreq.PunctuationWidthPolicy()
+        assertEquals(8f, advanceOfMidLinePunct("中–中文", "–", full))
+        assertEquals(16f, advanceOfMidLinePunct("中～中文", "～", full))
+    }
+
+    @Test
     fun kaimingStyleHalvesInteriorPunctuationButNotSentenceEnd() {
         val full = ink.duo3.tiqian.clreq.PunctuationWidthPolicy()
         val kaiming = ink.duo3.tiqian.clreq.PunctuationWidthPolicy(

@@ -394,6 +394,9 @@ object ClreqPunctuationPolicies {
      * builder's advance override.
      */
     fun forcedHalfWidth(char: Char, policy: PunctuationWidthPolicy): Boolean {
+        // 短横线占半个字位置（CLREQ 5.1.6，与风格无关；grid 占位，覆盖
+        // 字体 glyph advance）.
+        if (char in ShortHyphenConnectors) return true
         val cls = classify(char)
         if (policy.gbFixedSeparators &&
             cls in setOf(
@@ -467,9 +470,16 @@ object ClreqPunctuationPolicies {
         }
     }
 
+    /**
+     * 短横线（连接号的一种）占半个字位置（CLREQ / GB/T 15834 5.1.6），与
+     * 浪纹线 ～（一字）区别。U+002D HYPHEN-MINUS、U+2013 EN DASH。
+     */
+    private val ShortHyphenConnectors = setOf('-', '–')
+
     private fun Char.defaultPunctuationBodyEm(punctuationClass: PunctuationClass): Float =
         when {
             this == '⸺' -> 2.0f
+            this in ShortHyphenConnectors -> 0.5f
             punctuationClass == PunctuationClass.PauseOrStop -> 0.5f
             punctuationClass == PunctuationClass.Closing -> 0.5f
             punctuationClass == PunctuationClass.Opening -> 0.5f
@@ -479,6 +489,7 @@ object ClreqPunctuationPolicies {
     private fun Char.defaultPunctuationAdvanceEm(punctuationClass: PunctuationClass): Float =
         when {
             this == '⸺' -> 2.0f
+            this in ShortHyphenConnectors -> 0.5f
             punctuationClass == PunctuationClass.Other -> 1.0f
             else -> 1.0f
         }

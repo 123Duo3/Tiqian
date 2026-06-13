@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: 标点宽度风格（GB 固定半宽 + 开明式，ADR 0027）
-Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）；零散 profile 项：连续三标点禁则、连接号按字细分宽度
+Last completed: 连接号按字细分——短横线半字（ADR 0027 amendment）。零散 profile 项收尾：连续三标点禁则放宽 CLREQ 自标「不推荐」，有意不做（gap-audit）
+Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）。已记待办：强制行长为字号整数倍（grid-first 完整形态，ADR 0007）
 ```
 
 ## Slice / Milestone 对照表
@@ -59,6 +59,10 @@ Slice 0–18 全部 `done`，第一阶段（CLREQ 简体横排）覆盖收口—
 
 明确推到后面，不在 roadmap 主线上：
 
+- **强制行长为字号整数倍**（grid-first 完整形态）：把 `maxWidth` 量化到
+  `fontSize` 的整数倍（N 字宽），版心严格对齐字格。ADR 0007 的 grid 哲学
+  的完整落地，孔雀「从行长为字号整数倍说起」。涉及 `LayoutConstraints` /
+  引擎入口的行长归一，待开 slice。
 - 竖排 / JLREQ profile。
 - Ruby、注音、纵中横。
 - 分页、多栏、脚注。

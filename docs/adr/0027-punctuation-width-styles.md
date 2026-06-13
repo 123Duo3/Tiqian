@@ -42,7 +42,13 @@ PushIn 挤压档、也不进 justify 拉伸），一举两得。`PunctuationAtom
 `forcedHalfWidth(char, policy)` 在 `ClreqPunctuationPolicies` 里，与
 分类同源；判定句末点号用 `SentenceEndStops = {。！？．}`。
 
-默认 `FullWidth` + `gbFixedSeparators=false` = 既有行为，golden 零漂移。
+**短横线（–, U+2013；-, U+002D）始终半字**（CLREQ 5.1.6「短横线……占半个
+字位置」，GB/T 15834 同），与风格无关，故 `forcedHalfWidth` 对短横线
+**无条件**返回 true——和浪纹线 ～（一字）区别开。这是 grid 占位规则，覆盖
+字体 glyph advance（否则 stub 给 1em、真字体给 glyph 本宽都不对）。
+
+默认 `FullWidth` + `gbFixedSeparators=false` = 既有行为，golden 零漂移
+（短横线占字内容 fixture 未覆盖，无 fixture 漂移）。
 
 ## Consequences
 
@@ -53,5 +59,3 @@ PushIn 挤压档、也不进 justify 拉伸），一举两得。`PunctuationAtom
   字距），字面保持半宽，符合开明式「字面半字、字距照拉」。
 - 未做：开明式「夹注号」严格只指括号，本实现把成对引号也并入半字
   （成对标点开明式通常同样半排）——如需区分再加 profile 细分。
-  连接号默认占宽（非 GB 时）的全宽/半宽（CLREQ 短横线 0.5em vs 浪纹线
-  1em）未按字细分，留作后续。
