@@ -143,61 +143,10 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     canvas.clear(-1)
     val paint = org.jetbrains.skia.Paint().apply { color = 0xFF000000.toInt() }
     val shaper = org.jetbrains.skia.shaper.Shaper.makeShaperDrivenWrapper()
-    val defaultAutoSpaceGap = 0.25f * fontSize
-    // Consumed leading glue shifts the glyph origin left (the blob keeps the
-    // font's built-in leading blank; the engine removed it from the advance).
-    val leadingConsumedByRange = result.debug.geometryDecisions
-        .filter { it.leadingGlueConsumed > 0f }
-        .associate { it.range to it.leadingGlueConsumed }
 
-    for (line in result.lines) {
-        val lineClusters = result.clusters.filter {
-            it.range.start >= line.range.start && it.range.end <= line.range.end
-        }
-        var x = line.indent
-        val baselineY = line.baseline + topPad
-        for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
-            val role = result.debug.fontDecisions.firstOrNull {
-                // Containment: segmented word clusters sit inside the
-                // decision's range (see SkiaLayoutRenderer).
-                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
-            }?.role
-            val font = if (role == "LatinText") latinFont else cjkFont
-
-            val autoSpaces = result.debug.autoSpaceDecisions
-                .filter { it.clusterRange == cluster.range }
-            val leadingDecision = autoSpaces.firstOrNull { it.side == "leading" }
-                val leadingStrip = leadingDecision?.charactersAffected ?: 0
-            val trailingDecision = autoSpaces.firstOrNull { it.side == "trailing" }
-                val trailingStrip = trailingDecision?.charactersAffected ?: 0
-            val isLineStart = clusterIndexInLine == 0
-            val isLineEnd = clusterIndexInLine == lineClusters.lastIndex
-            // Insert decisions carry charactersAffected=0 but still gap.
-                val leadingGap = if (leadingDecision != null && !isLineStart) defaultAutoSpaceGap else 0f
-            val trailingGap = if (trailingDecision != null && !isLineEnd) defaultAutoSpaceGap else 0f
-            val paintText = cluster.displayText
-                .drop(leadingStrip)
-                .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
-
-            if (paintText.isNotEmpty()) {
-                val leadingShift = leadingConsumedByRange[cluster.range] ?: 0f
-                ink.duo3.tiqian.shaping.skia.shapeTextBlob(shaper, paintText, font, language)?.let { blob ->
-                    canvas.drawTextBlob(blob, x + leadingGap - leadingShift, baselineY, paint)
-                }
-            }
-
-            if (leadingStrip > 0 || trailingStrip > 0) {
-                val paintWidth = if (paintText.isNotEmpty()) {
-                    org.jetbrains.skia.TextLine.make(paintText, font).width
-                } else {
-                    0f
-                }
-                x += leadingGap + paintWidth + trailingGap
-            } else {
-                x += cluster.advance
-            }
-        }
-    }
+    // Shared cluster-walk (tiqian-shaping-skia) — same path the Compose
+    // renderer uses; topPad shifts the baseline for the raster canvas.
+    ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs(canvas, result, cjkFont, latinFont, paint, shaper, topPad)
 
     // Emphasis dots (ADR 0018): align the dot glyph's ink centre to the
     // engine-decided anchor; topPad shifts engine canvas coords like the
@@ -318,53 +267,21 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                 }
                 g.color = Color.BLACK
 
-                // For `text-autospace: replace`: REMOVE typed U+0020 from the
-                // rendered text at CJK boundaries, replace with the autospace
-                // gap. The engine reduces cluster.advance by what the shaped
-                // typed spaces contributed, but the residual cluster.advance
-                // doesn't perfectly track AWT's measured paint width — so we
-                // step x by the painted width + leading/trailing gaps rather
-                // than trust cluster.advance for stripped clusters. Engine
-                // model is still correct; this is a visual-only override.
-                val autoSpaces = result.debug.autoSpaceDecisions
-                    .filter { it.clusterRange == cluster.range }
-                val leadingDecision = autoSpaces.firstOrNull { it.side == "leading" }
-                val leadingStrip = leadingDecision?.charactersAffected ?: 0
-                val trailingDecision = autoSpaces.firstOrNull { it.side == "trailing" }
-                val trailingStrip = trailingDecision?.charactersAffected ?: 0
-                // TextAutoSpaceLineEdgeTrim: the engine removes the autospace
-                // gap at line edges, so the rasterizer must not paint it.
+                // A CJK↔Latin Insert gap (autospace side leading) shifts the
+                // glyph right by a quarter em; the trailing gap is already in
+                // cluster.advance. Consumed leading glue shifts left.
                 val isLineStart = clusterIndexInLine == 0
-                val isLineEnd = clusterIndexInLine == lineClusters.lastIndex
-                // Insert decisions carry charactersAffected=0 but still gap.
-                val leadingGap = if (leadingDecision != null && !isLineStart) defaultAutoSpaceGap else 0f
-                val trailingGap = if (trailingDecision != null && !isLineEnd) defaultAutoSpaceGap else 0f
-                val paintText = cluster.displayText
-                    .drop(leadingStrip)
-                    .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
-
-                if (paintText.isNotEmpty()) {
-                    // Consumed leading glue shifts the glyph origin left (the
-                    // drawn glyph keeps the font's built-in leading blank; the
-                    // engine removed it from the cluster's advance).
-                    val leadingShift = leadingConsumedAwt[cluster.range] ?: 0f
-                    g.drawString(paintText, x + leadingGap - leadingShift, baselineY)
-                }
-
-                if (leadingStrip > 0 || trailingStrip > 0) {
-                    // Override: render-time step = autospace gap + AWT-measured
-                    // paint width + autospace gap. Decouples from engine's
-                    // cluster.advance for this cluster, which already accounts
-                    // for shaped-space variance.
-                    val paintWidth = if (paintText.isNotEmpty()) {
-                        g.font.getStringBounds(paintText, g.fontRenderContext).width.toFloat()
-                    } else {
-                        0f
+                val leadingGap = if (
+                    !isLineStart && result.debug.autoSpaceDecisions.any {
+                        it.clusterRange == cluster.range && it.side == "leading"
                     }
-                    x += leadingGap + paintWidth + trailingGap
-                } else {
-                    x += cluster.advance
+                ) defaultAutoSpaceGap else 0f
+
+                if (cluster.displayText.isNotEmpty()) {
+                    val leadingShift = leadingConsumedAwt[cluster.range] ?: 0f
+                    g.drawString(cluster.displayText, x + leadingGap - leadingShift, baselineY)
                 }
+                x += cluster.advance
             }
         }
 

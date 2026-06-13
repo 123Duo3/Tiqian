@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.shaping.skia
 
+import ink.duo3.tiqian.core.LayoutResult
+import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
@@ -69,6 +71,61 @@ fun shapeTextBlob(
     return TextBlobBuilder()
         .appendRunPosH(font, glyphIds.toShortArray(), xPositions.toFloatArray(), 0f)
         .build()
+}
+
+/**
+ * Draws a [LayoutResult]'s glyphs onto a Skia [canvas] — the single shared
+ * cluster-walk for the Compose renderer and the playground skia raster (they
+ * had drifting copies; the role-containment and leading-glue-shift bugs each
+ * had to be fixed in both). Pure presentation: x stepping is the engine's
+ * resolved `cluster.advance`; glyphs come from [shapeTextBlob] so forms match
+ * the measured layout. [baselineOffset] lets the raster add its canvas top
+ * padding (Compose passes 0).
+ *
+ * - `role` lookup is by CONTAINMENT (a word cluster sits inside its font
+ *   decision's range after `LatinWordSegmentation`).
+ * - A CJK↔Latin Insert gap (autospace side leading) shifts the glyph right by
+ *   a quarter em; the trailing gap is already inside `cluster.advance`.
+ * - Consumed LEADING glue (line-start 开标点 trim, 间隔号 push-in) shifts the
+ *   glyph LEFT — the blob keeps the font's built-in leading blank.
+ */
+fun drawTiqianGlyphs(
+    canvas: Canvas,
+    result: LayoutResult,
+    cjkFont: Font,
+    latinFont: Font,
+    paint: org.jetbrains.skia.Paint,
+    shaper: Shaper,
+    baselineOffset: Float = 0f,
+) {
+    val language = result.input.textStyle.locale
+    val autoSpaceGap = 0.25f * result.input.textStyle.fontSize
+    val leadingConsumed = result.debug.geometryDecisions
+        .filter { it.leadingGlueConsumed > 0f }
+        .associate { it.range to it.leadingGlueConsumed }
+    for (line in result.lines) {
+        val lineClusters = result.clusters.filter {
+            it.range.start >= line.range.start && it.range.end <= line.range.end
+        }
+        var x = line.indent
+        val baselineY = line.baseline + baselineOffset
+        for ((indexInLine, cluster) in lineClusters.withIndex()) {
+            val role = result.debug.fontDecisions.firstOrNull {
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role
+            val font = if (role == "LatinText") latinFont else cjkFont
+            val hasLeadingGap = result.debug.autoSpaceDecisions
+                .any { it.clusterRange == cluster.range && it.side == "leading" }
+            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
+            if (cluster.displayText.isNotEmpty()) {
+                val leadingShift = leadingConsumed[cluster.range] ?: 0f
+                shapeTextBlob(shaper, cluster.displayText, font, language)?.let { blob ->
+                    canvas.drawTextBlob(blob, x + leadingGap - leadingShift, baselineY, paint)
+                }
+            }
+            x += cluster.advance
+        }
+    }
 }
 
 /**
