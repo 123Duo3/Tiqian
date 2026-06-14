@@ -14,29 +14,35 @@ import kotlin.test.assertTrue
 class HyphenationLayoutTest {
     private val text = "中文internationalization中文"
 
-    private fun layoutWith(hyphenator: Hyphenator) =
-        ExplainableStubParagraphLayoutEngine(hyphenator = hyphenator).layout(
-            LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
-                content = TiqianTextContent(text),
-                constraints = LayoutConstraints(maxWidth = 160f),
-            ),
-        )
+    private fun layoutWith(
+        hyphenator: Hyphenator,
+        content: String = text,
+        maxWidth: Float = 160f,
+    ) = ExplainableStubParagraphLayoutEngine(hyphenator = hyphenator).layout(
+        LayoutInput(
+            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            content = TiqianTextContent(content),
+            constraints = LayoutConstraints(maxWidth = maxWidth),
+        ),
+    )
 
     private fun Char.isLatinLetter() = this in 'a'..'z' || this in 'A'..'Z'
 
     @Test
-    fun longWesternWordWrapsAtHyphenationPointsWithAHangingHyphen() {
-        val noHyphen = layoutWith(NoHyphenator)
-        val hyphenated = layoutWith(EnglishHyphenation.enUs)
+    fun fittingWordHyphenatesOnlyWhenAHyphenatorIsInjected() {
+        // "coffee" (96) fits the measure (112), so without a hyphenator it stays
+        // whole and wraps as a unit; with one it splits cof-fee and a hyphen
+        // hangs at the line end. (Over-long words hard-break regardless — see
+        // overlongLatinWordHardBreaksWithAHangingHyphen.)
+        val noHyphen = layoutWith(NoHyphenator, "中文中 coffee", 112f)
+        val hyphenated = layoutWith(EnglishHyphenation.enUs, "中文中 coffee", 112f)
 
-        // Default: the word stays a single unbreakable cluster, no hanging hyphen.
-        assertTrue(noHyphen.clusters.any { it.text == "internationalization" })
+        assertTrue(noHyphen.clusters.any { it.text == "coffee" })
         assertTrue(noHyphen.lines.none { it.hyphenAdvance > 0f })
 
-        // With the hyphenator the word is split into syllable clusters and at
-        // least one line ends with a hanging hyphen (LineEndHangingHyphen).
-        assertTrue(hyphenated.clusters.size > noHyphen.clusters.size)
+        assertTrue(hyphenated.clusters.none { it.text == "coffee" })
+        assertTrue(hyphenated.clusters.any { it.text == "cof" })
+        assertTrue(hyphenated.clusters.any { it.text == "fee" })
         assertTrue(hyphenated.lines.any { it.hyphenAdvance > 0f }, "no line hyphenated")
     }
 

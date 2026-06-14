@@ -714,10 +714,11 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun greedyBreakerKeepsLatinRunAsSingleClusterEvenWhenLineOverflows() {
-        // "中" (16f) + "English" cluster (7*16=112f) > maxWidth=80f.
-        // First line should be "中" alone (16f), "English" goes to line 2 (overflows but
-        // can't be split further at cluster level in this slice).
+    fun overlongLatinWordHardBreaksWithAHangingHyphen() {
+        // LatinForcedHyphenBreak (ADR 0029): "English" (112) > measure 80 and has
+        // no syllable points (NoHyphenator default), so it hard-breaks at a
+        // character boundary with a hanging hyphen, keeping 前二后三 — "En" head,
+        // "ish" tail.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -726,9 +727,11 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
+        assertTrue(result.clusters.none { it.text == "English" })
+        assertTrue(result.clusters.any { it.text == "En" }) // ≥2 chars kept at head
+        assertTrue(result.clusters.any { it.text == "ish" }) // ≥3 chars kept at tail
         assertEquals(2, result.lines.size)
-        assertEquals("中", result.clusters[result.lines[0].range.start.coerceAtMost(0)].text)
-        assertEquals("English", result.clusters.first { it.text == "English" }.text)
+        assertTrue(result.lines[0].hyphenAdvance > 0f) // hyphen hangs at the break
     }
 
     @Test
@@ -857,19 +860,20 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun kinsokuFallsBackToLeaveRaggedWhenPreviousLineCannotSpareACluster() {
-        // English is one cluster (7 chars, 112f). At maxWidth=96, greedy keeps it on
-        // line 0 alone (i > lineStart guard) and pushes 。 to line 1. Previous line
-        // has only one cluster, so CarryPrevious cannot apply -> LeaveRagged.
+        // "Coffee" is one cluster (6 chars, 96f = measure, so NOT hard-broken).
+        // At maxWidth=96 greedy fills line 0 with it alone and pushes 。 to line 1.
+        // Previous line has only one cluster, so CarryPrevious cannot apply ->
+        // LeaveRagged.
         val result = fixedBasicEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
-                content = TiqianTextContent("English。"),
+                content = TiqianTextContent("Coffee。"),
                 constraints = LayoutConstraints(maxWidth = 96f),
             ),
         )
 
         assertEquals(2, result.lines.size)
-        assertEquals("English", result.clusters.first { it.text == "English" }.text)
+        assertEquals("Coffee", result.clusters.first { it.text == "Coffee" }.text)
         assertEquals("LeaveRagged", result.debug.lineDecisions[1].repair)
         assertEquals(20, result.debug.lineDecisions[1].repairPenalty)
         assertTrue(
@@ -1354,13 +1358,14 @@ class ExplainableStubParagraphLayoutEngineTest {
         // sino-western gaps are exhausted, the remaining deficit spreads
         // evenly over hanzi boundaries past the old 0.25em cap — a justified
         // line must reach maxWidth exactly, never stop short.
-        // Stub: 4 hanzi (64) then an unbreakable 12-char Latin word (192)
-        // that must wrap — line 0 deficit = 160 - 64 = 96 over 3 hanzi
-        // boundaries = 32 each, far past the old 4px cap.
+        // Stub: 4 hanzi (64) then a 7-char Latin word "Network" (112) that fits
+        // the measure (≤160, NOT hard-broken) but overflows after the hanzi and
+        // wraps whole — line 0 deficit = 160 - 64 = 96 over 3 hanzi boundaries =
+        // 32 each, far past the old 4px cap.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
-                content = TiqianTextContent("中文中文Considerable中文"),
+                content = TiqianTextContent("中文中文Network中文"),
                 constraints = LayoutConstraints(maxWidth = 160f),
             ),
         )

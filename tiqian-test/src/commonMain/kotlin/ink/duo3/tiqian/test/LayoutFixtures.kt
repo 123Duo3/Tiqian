@@ -163,6 +163,14 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
+            id = "latin-hard-break",
+            text = "中Network",
+            constraints = LayoutConstraints(maxWidth = 64f),
+            notes = "LatinForcedHyphenBreak (ADR 0029): with NO hyphenator (default), " +
+                "an over-long Latin word still hard-breaks at character boundaries " +
+                "with a hanging hyphen, keeping 前二后三 — 'Ne' head, 'ork' tail.",
+        ),
+        LayoutFixture(
             id = "western-hyphenation",
             text = "请运行 internationalization 命令",
             constraints = LayoutConstraints(maxWidth = 160f),

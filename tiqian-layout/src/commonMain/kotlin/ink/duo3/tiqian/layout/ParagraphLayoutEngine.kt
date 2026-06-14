@@ -104,6 +104,44 @@ class ExplainableStubParagraphLayoutEngine(
             policy = clreqProfile.punctuationGlyphPolicy,
         )
 
+        // LineLengthGridQuantization (grid-first, ADR 0028): floor the
+        // container to an integer number of 字 (N×fontSize) so the body lands
+        // on the grid; the sub-字 leftover places the whole body within the
+        // container by bodyAlignment. Bypassable for known-exact widths.
+        // Computed up front because LatinForcedHyphenBreak (below) needs the
+        // measure to decide which Latin pieces can never fit on a line.
+        val grid = input.paragraphStyle.lineLengthGrid
+        val containerWidth = input.constraints.maxWidth
+        val gridCells = floor(containerWidth / fontSize).toInt().coerceAtLeast(1)
+        val measure = if (grid.enabled) {
+            (gridCells * fontSize).coerceAtMost(containerWidth)
+        } else {
+            containerWidth
+        }
+        val gridSlack = containerWidth - measure
+        val gridBodyAlignment = grid.bodyAlignment ?: input.paragraphStyle.lastLineAlignment
+        val gridBodyOffset = if (!grid.enabled) {
+            0f
+        } else {
+            when (gridBodyAlignment) {
+                LastLineAlignment.Start -> 0f
+                LastLineAlignment.Center -> gridSlack / 2f
+                LastLineAlignment.End -> gridSlack
+            }
+        }
+        val lineLengthGridDecision = LineLengthGridDecisionInfo(
+            enabled = grid.enabled,
+            containerWidth = containerWidth,
+            fontSize = fontSize,
+            cells = if (grid.enabled) gridCells else (measure / fontSize).toInt(),
+            measure = measure,
+            slack = gridSlack,
+            bodyAlignment = gridBodyAlignment.name,
+            bodyOffset = gridBodyOffset,
+            reason = if (grid.enabled) "LineLengthGridQuantization" else "GridBypassed",
+        )
+        val measureEm = measure / fontSize
+
         val quotePairs = quotePairAnalyzer.analyze(text)
         val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier, context)
         val roleOverrideInfos = quoteRoleOverrides.toRoleOverrideInfos(
@@ -174,27 +212,44 @@ class ExplainableStubParagraphLayoutEngine(
         // kerning at a space boundary is negligible.
         //
         // LineEndHangingHyphen (CLREQ §换行与断词连字「可使用连字符处」, ADR 0029):
-        // an all-letter Latin word is additionally split at the [hyphenator]'s
-        // syllable points so the breaker may wrap it there. The hyphen HANGS at
-        // the line end (like 行尾点号悬挂) — never reserved in the measure — so
-        // the content's 行尾对齐 holds. `hyphenOffsets` are the absolute source
-        // offsets a break at which earns a trailing hyphen. The default
-        // NoHyphenator returns no points ⇒ no split, zero golden churn.
+        // an all-letter Latin word is additionally split so the breaker may wrap
+        // it; the hyphen HANGS at the line end (like 行尾点号悬挂) — never reserved
+        // in the measure — so the content's 行尾对齐 holds. `hyphenOffsets` are the
+        // absolute source offsets a break at which earns a trailing hyphen.
+        //
+        // Cut points are (a) the [hyphenator]'s syllable points, plus (b)
+        // `LatinForcedHyphenBreak`: for any piece STILL wider than the measure
+        // (hyphenation off, or a syllable/token that can't fit), character-level
+        // fallback cuts that hard-break it — preferring 前二后三 (2/3) within the
+        // piece, breaking anywhere only when that can't be met (满足不了就算了).
         val hyphenOffsets = mutableSetOf<Int>()
         var hyphenAdvanceOrNull: Float? = null
+        fun latinWordCuts(decision: FontDecision, wordRange: TextRange): List<Int> {
+            val syllable = hyphenator.hyphenate(text.substring(wordRange.start, wordRange.end))
+            val cuts = sortedSetOf<Int>()
+            cuts += syllable.map { wordRange.start + it }
+            val relBounds = (listOf(0) + syllable + listOf(wordRange.length)).distinct()
+            for (i in 0 until relBounds.size - 1) {
+                val a = relBounds[i]
+                val b = relBounds[i + 1]
+                val pieceAdvance = shapeSegment(decision, TextRange(wordRange.start + a, wordRange.start + b))
+                    .clusters.singleOrNull()?.advance ?: 0f
+                if (pieceAdvance <= measure) continue
+                val lo = a + HYPHEN_MIN_LEFT
+                val hi = b - HYPHEN_MIN_RIGHT
+                val range = if (lo <= hi) lo..hi else (a + 1) until b
+                for (off in range) cuts += wordRange.start + off
+            }
+            return cuts.toList()
+        }
         val shapingResults = fontDecisions.flatMap { decision ->
             decision.shapingSegments(text).flatMap { segmentRange ->
                 val shaped = shapeSegment(decision, segmentRange)
                 val word = shaped.clusters.singleOrNull()
-                val points = if (
-                    decision.role == FontRole.LatinText && word != null &&
+                val isLatinWord = decision.role == FontRole.LatinText && word != null &&
                     word.text.isNotEmpty() && word.text.all { it.isLetter() }
-                ) {
-                    hyphenator.hyphenate(word.text)
-                } else {
-                    emptyList()
-                }
-                if (points.isEmpty()) {
+                val cuts = if (isLatinWord) latinWordCuts(decision, segmentRange) else emptyList()
+                if (cuts.isEmpty()) {
                     listOf(shaped)
                 } else {
                     if (hyphenAdvanceOrNull == null) {
@@ -208,7 +263,6 @@ class ExplainableStubParagraphLayoutEngine(
                             ),
                         ).clusters.singleOrNull()?.advance ?: (0.5f * fontSize)
                     }
-                    val cuts = points.map { segmentRange.start + it }
                     hyphenOffsets += cuts
                     val bounds = listOf(segmentRange.start) + cuts + listOf(segmentRange.end)
                     (0 until bounds.size - 1).map { k ->
@@ -391,41 +445,6 @@ class ExplainableStubParagraphLayoutEngine(
                 reason = "InterlinearMarkLineSpacingFloor",
             )
         }
-        // LineLengthGridQuantization (grid-first, ADR 0028): floor the
-        // container to an integer number of 字 (N×fontSize) so the body lands
-        // on the grid; the sub-字 leftover places the whole body within the
-        // container by bodyAlignment. Bypassable for known-exact widths.
-        val grid = input.paragraphStyle.lineLengthGrid
-        val containerWidth = input.constraints.maxWidth
-        val gridCells = floor(containerWidth / fontSize).toInt().coerceAtLeast(1)
-        val measure = if (grid.enabled) {
-            (gridCells * fontSize).coerceAtMost(containerWidth)
-        } else {
-            containerWidth
-        }
-        val gridSlack = containerWidth - measure
-        val gridBodyAlignment = grid.bodyAlignment ?: input.paragraphStyle.lastLineAlignment
-        val gridBodyOffset = if (!grid.enabled) {
-            0f
-        } else {
-            when (gridBodyAlignment) {
-                LastLineAlignment.Start -> 0f
-                LastLineAlignment.Center -> gridSlack / 2f
-                LastLineAlignment.End -> gridSlack
-            }
-        }
-        val lineLengthGridDecision = LineLengthGridDecisionInfo(
-            enabled = grid.enabled,
-            containerWidth = containerWidth,
-            fontSize = fontSize,
-            cells = if (grid.enabled) gridCells else (measure / fontSize).toInt(),
-            measure = measure,
-            slack = gridSlack,
-            bodyAlignment = gridBodyAlignment.name,
-            bodyOffset = gridBodyOffset,
-            reason = if (grid.enabled) "LineLengthGridQuantization" else "GridBypassed",
-        )
-        val measureEm = measure / fontSize
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         // MeasureAdaptiveFirstLineIndent: the indent default narrows to 1 字 on
@@ -1756,6 +1775,10 @@ private data class LineEdgeTrimResult(
 
 /** ADR 0018: dot ink centre sits this far below the BASELINE. */
 private const val EMPHASIS_DOT_CENTER_EM = 0.45f
+
+/** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
+private const val HYPHEN_MIN_LEFT = 2
+private const val HYPHEN_MIN_RIGHT = 3
 
 /** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
 private const val WORD_SPACE_MIN_EM = 0.25f
