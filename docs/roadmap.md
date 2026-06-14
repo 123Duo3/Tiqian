@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: 中西混排西文音节连字（`LineEndHangingHyphen`，ADR 0029）——内置 en-US TeX 模式 + `LiangHyphenator`；超宽片段补连字符硬断（前二后三）；**默认启用**（`defaultHyphenator()` expect/actual，JVM=en-US）；连字为**最后一档**（`decideHyphenBreak`：整词换行优先，仅当超宽或汉字间距会被拉过 0.5em/间距才连字）。renderer 画悬挂连字符、playground 目检过
-Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）。西文连字后续：已有连字符处断点、整段最优连字、松紧度量改为精确（扣词距/中西间距容量）、Android 原生断词器接同一 `Hyphenator` 接口
+Last completed: 中西混排西文音节连字收口（`LineEndHangingHyphen`，ADR 0029）——内置 en-US TeX 模式 + `LiangHyphenator`；**默认启用**（`defaultHyphenator()` expect/actual，JVM=en-US）；**最后一档**触发（`decideHyphenBreak`：整词换行优先，松紧扣中西间距容量后 >0.5em/间距才连字）；超宽词补连字符硬断（前二后三）；连字符**占版心宽**、溢出先**标点挤压**（复用 `shrinkOpportunities`）、挤不动才悬挂。renderer 画连字符、playground 目检过
+Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）。西文连字零散后续：已有连字符处断点（well-known/URL，无数据）、整段最优连字、Android 原生断词器接同一 `Hyphenator` 接口
 ```
 
 ## Slice / Milestone 对照表
