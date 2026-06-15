@@ -15,10 +15,10 @@ import ink.duo3.tiqian.shaping.skia.SkiaTextShaper
 import kotlin.math.ceil
 
 /**
- * Renders [text] with the Tiqian paragraph engine (Slice 7, ADR 0017).
+ * Renders [text] as a CJK paragraph with the Tiqian engine (Slice 7, ADR 0017).
  *
  * The composable makes NO layout decisions: measure runs the injected
- * engine against the incoming width constraint and reports
+ * [measurer] against the incoming width constraint and reports
  * `LayoutResult.size`; draw walks the result and paints language-tagged
  * Skia TextBlobs — the same glyph forms the engine measured.
  *
@@ -26,18 +26,18 @@ import kotlin.math.ceil
  * (e.g. `fontSize = 16f * density`) until DPI handling lands.
  */
 @Composable
-fun TiqianParagraph(
+fun CjkParagraph(
     text: String,
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
-    measurer: TiqianTextMeasurer = rememberTiqianTextMeasurer(),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
     Layout(
         modifier = modifier.drawBehind {
-            result.value?.let { drawTiqianLayout(it) }
+            result.value?.let { drawParagraph(it) }
         },
         content = {},
     ) { _, constraints ->
@@ -47,13 +47,11 @@ fun TiqianParagraph(
             DEFAULT_UNBOUNDED_WIDTH
         }
         val laidOut = measurer.measure(
-            TiqianTextRequest(
-                text = text,
-                textStyle = textStyle,
-                paragraphStyle = paragraphStyle,
-                constraints = LayoutConstraints(maxWidth = maxWidth),
-                decorations = decorations,
-            ),
+            text = text,
+            constraints = LayoutConstraints(maxWidth = maxWidth),
+            textStyle = textStyle,
+            paragraphStyle = paragraphStyle,
+            decorations = decorations,
         )
         result.value = laidOut
         layout(
@@ -63,11 +61,11 @@ fun TiqianParagraph(
     }
 }
 
-/** Default engine: Skia shaper (real advances + halt/locl) + lookahead breaker. */
+/** Default measurer: Skia shaper (real advances + halt/locl) + lookahead breaker. */
 @Composable
-fun rememberTiqianTextMeasurer(): TiqianTextMeasurer =
+fun rememberParagraphMeasurer(): ParagraphMeasurer =
     remember {
-        TiqianTextMeasurer(
+        ParagraphMeasurer(
             ExplainableStubParagraphLayoutEngine(
                 lineBreaker = LookaheadLineBreaker(),
                 textShaper = SkiaTextShaper(),

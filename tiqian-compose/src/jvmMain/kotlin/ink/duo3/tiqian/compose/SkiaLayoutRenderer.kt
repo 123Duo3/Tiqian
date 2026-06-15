@@ -18,7 +18,7 @@ import org.jetbrains.skia.shaper.Shaper
  * what the engine measured. The cluster walk (autospace strips, line-edge
  * gap suppression) is the same contract the playground raster implements.
  */
-internal fun DrawScope.drawTiqianLayout(
+internal fun DrawScope.drawParagraph(
     result: LayoutResult,
     color: Int = 0xFF000000.toInt(),
 ) {
