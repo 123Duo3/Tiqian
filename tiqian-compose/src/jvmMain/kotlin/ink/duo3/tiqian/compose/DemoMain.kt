@@ -7,13 +7,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.TextField
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.singleWindowApplication
+import ink.duo3.tiqian.core.DecorationKind
+import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
@@ -32,6 +41,17 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        var text by remember { mutableStateOf("") }
+
+        TextField(
+            value = text,
+            onValueChange = { text = it },
+        )
+        CjkParagraph(
+            text = text,
+            modifier = Modifier.width(480.dp),
+            textStyle = textStyle,
+        )
         CjkParagraph(
             text = PARAGRAPH,
             modifier = Modifier.width(480.dp),
@@ -48,9 +68,9 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             modifier = Modifier.width(480.dp),
             textStyle = textStyle,
             decorations = listOf(
-                ink.duo3.tiqian.core.DecorationSpan(
-                    range = ink.duo3.tiqian.core.TextRange(4, 16),
-                    kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
+                DecorationSpan(
+                    range = TextRange(4, 16),
+                    kind = DecorationKind.Emphasis,
                 ),
             ),
         )

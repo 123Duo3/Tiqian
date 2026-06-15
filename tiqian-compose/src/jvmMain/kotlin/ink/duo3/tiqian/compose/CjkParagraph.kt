@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.Layout
+import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextStyle
@@ -31,8 +32,9 @@ fun CjkParagraph(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
     decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
     Layout(
@@ -61,14 +63,22 @@ fun CjkParagraph(
     }
 }
 
-/** Default measurer: Skia shaper (real advances + halt/locl) + lookahead breaker. */
+/**
+ * Default measurer: Skia shaper (real advances + halt/locl) + lookahead breaker,
+ * resolving every paragraph to [profile]. Customize CLREQ behaviour (禁则档、
+ * 标点宽度、中西自动间距、挤压风格…) by passing e.g.
+ * `ClreqProfile.MainlandHorizontal.copy(punctuationWidth = …)`.
+ */
 @Composable
-fun rememberParagraphMeasurer(): ParagraphMeasurer =
-    remember {
+fun rememberParagraphMeasurer(
+    profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
+): ParagraphMeasurer =
+    remember(profile) {
         ParagraphMeasurer(
             ExplainableStubParagraphLayoutEngine(
                 lineBreaker = LookaheadLineBreaker(),
                 textShaper = SkiaTextShaper(),
+                clreqProfileResolver = { profile },
             ),
         )
     }
