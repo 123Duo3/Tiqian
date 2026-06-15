@@ -2,7 +2,7 @@ fixture: latin-word-wrap
 text: 他引用了一句话：The quick brown fox jumps over the lazy dog，然后继续讲。
 maxWidth: 240.0
 == greedy ==
-size 240.0x69.1
+size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-12 natural=184.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
@@ -66,8 +66,9 @@ edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
-size 240.0x69.1
+size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-11 natural=176.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 11-27 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
@@ -131,3 +132,4 @@ edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 11-12 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault

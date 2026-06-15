@@ -69,11 +69,12 @@ data class ParagraphStyle(
     /**
      * Baseline-to-baseline line height, in **the same units as
      * [TextStyle.fontSize] (engine pixels), not a multiplier**. `null` = the
-     * natural height (字面 + any [InterlinearMarkLineSpacingFloor]). A value is
-     * **clamped up** to that natural height — a line shorter than the content
-     * would overlap glyphs, so values below ~1em have no effect (the resolution
-     * is recorded in `LineSpacingDecisionInfo`). To set 1.5× of a 16px font,
-     * pass `24f`, not `1.5f`.
+     * `CjkBodyLineHeightDefault` (1.5em — 中文正文 leading). A value overrides
+     * that default in either direction, but is still **clamped up** to the
+     * no-overlap minimum (字面 + any [InterlinearMarkLineSpacingFloor]) — a line
+     * shorter than the content would overlap glyphs/marks, so values below ~1em
+     * have no effect (the resolution is recorded in `LineSpacingDecisionInfo`).
+     * To set 1.5× of a 16px font, pass `24f`, not `1.5f`.
      */
     val lineHeight: Float? = null,
     /**

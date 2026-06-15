@@ -707,17 +707,18 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(4, first.range.end)
         assertEquals(64f, first.adjustedWidth)
         assertEquals(0f, first.top)
-        assertEquals(16f, first.bottom)
+        // CjkBodyLineHeightDefault: 1.5em = 24f per line.
+        assertEquals(24f, first.bottom)
 
         assertEquals(4, second.range.start)
         assertEquals(8, second.range.end)
         assertEquals(64f, second.adjustedWidth)
-        assertEquals(16f, second.top)
-        assertEquals(32f, second.bottom)
+        assertEquals(24f, second.top)
+        assertEquals(48f, second.bottom)
 
         assertEquals(2, result.debug.lineDecisions.size)
         assertTrue(result.debug.lineDecisions.all { it.kind == "greedy" })
-        assertEquals(32f, result.size.height)
+        assertEquals(48f, result.size.height)
     }
 
     @Test
@@ -955,9 +956,10 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val line = result.lines.single()
         // ADR 0002 amendment: real baseline at the typo ascent (0.88em), not the
-        // em centre; box height = sTypo 0.88 + 0.12 = 1em.
-        assertEquals(14.08f, line.baseline)
-        assertEquals(16f, line.bottom)
+        // em centre. Box height = CjkBodyLineHeightDefault 1.5em = 24f; the
+        // 0.5em leading splits evenly, so baseline = 4 + 14.08.
+        assertEquals(18.08f, line.baseline)
+        assertEquals(24f, line.bottom)
         val cjk = result.debug.metricDecisions.first { it.role == "CjkText" }
         assertEquals(14.08f, cjk.layoutAscent)
         assertEquals(1.92f, cjk.layoutDescent)
@@ -1818,13 +1820,18 @@ class ExplainableStubParagraphLayoutEngineTest {
                 ),
             )
 
+        // Single-sided 0.5em floor (→24) coincides with the 1.5em body default
+        // (→24), so the default already provides it — the mark floor doesn't bind.
         val single = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.SingleSided)
         assertEquals(24f, single.lines.single().bottom)
-        assertEquals(true, single.debug.lineSpacingDecision?.floorApplied)
+        assertEquals(false, single.debug.lineSpacingDecision?.floorApplied)
 
+        // Double-sided 0.625em floor (→26) exceeds the body default, so it binds.
         val duplex = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.DoubleSided)
         assertEquals(26f, duplex.lines.single().bottom)
+        assertEquals(true, duplex.debug.lineSpacingDecision?.floorApplied)
 
+        // Explicit 20 < the no-overlap minimum (16+8) → clamped up by the floor.
         val clamped = layoutWith(20f, ink.duo3.tiqian.core.PrintingSides.SingleSided)
         assertEquals(24f, clamped.lines.single().bottom)
         assertEquals(true, clamped.debug.lineSpacingDecision?.floorApplied)
@@ -1833,7 +1840,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(28f, generous.lines.single().bottom)
         assertEquals(false, generous.debug.lineSpacingDecision?.floorApplied)
 
-        // No marks → no floor, no decision: default stays at 1.0em.
+        // No marks → CjkBodyLineHeightDefault 1.5em (24f); the decision records it.
         val plain = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -1841,8 +1848,9 @@ class ExplainableStubParagraphLayoutEngineTest {
                 constraints = LayoutConstraints(maxWidth = 240f),
             ),
         )
-        assertEquals(16f, plain.lines.single().bottom)
-        assertEquals(null, plain.debug.lineSpacingDecision)
+        assertEquals(24f, plain.lines.single().bottom)
+        assertEquals("CjkBodyLineHeightDefault", plain.debug.lineSpacingDecision?.reason)
+        assertEquals(false, plain.debug.lineSpacingDecision?.floorApplied)
     }
 
     @Test

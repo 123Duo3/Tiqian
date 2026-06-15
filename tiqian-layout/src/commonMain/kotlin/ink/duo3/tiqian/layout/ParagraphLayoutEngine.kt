@@ -496,22 +496,34 @@ class ExplainableStubParagraphLayoutEngine(
                 PrintingSides.DoubleSided -> 0.625f * fontSize
             }
         }
+        val defaultBodyLineHeight = fontSize * DEFAULT_BODY_LINE_HEIGHT_EM
         val lineMetrics = metricDecisions.lineMetrics(
             explicitLineHeight = input.paragraphStyle.lineHeight,
+            defaultLineHeight = defaultBodyLineHeight,
             spacingFloor = interlinearSpacingFloor,
         )
-        val lineSpacingDecision = if (input.decorations.isEmpty()) {
+        val lineSpacingDecision = if (lineMetrics.height <= 0f) {
             null
         } else {
             val natural = lineMetrics.height - lineMetrics.extraLeading
+            val requested = input.paragraphStyle.lineHeight
+            // Did the mark floor raise the line above what the explicit/default
+            // height alone would give? (Single-sided 0.5em is subsumed by the
+            // 1.5em body default; double-sided 0.625em still binds.)
+            val markFloorBinds = interlinearSpacingFloor > 0f &&
+                natural + interlinearSpacingFloor > (requested ?: defaultBodyLineHeight) + 0.001f
             LineSpacingDecisionInfo(
                 naturalHeight = natural,
-                requestedLineHeight = input.paragraphStyle.lineHeight,
+                requestedLineHeight = requested,
                 resolvedHeight = lineMetrics.height,
                 spacingFloor = interlinearSpacingFloor,
                 printingSides = input.paragraphStyle.printingSides.name,
-                floorApplied = lineMetrics.height > ((input.paragraphStyle.lineHeight ?: 0f).coerceAtLeast(natural)),
-                reason = "InterlinearMarkLineSpacingFloor",
+                floorApplied = markFloorBinds,
+                reason = when {
+                    requested != null && !markFloorBinds -> "ExplicitLineHeight"
+                    markFloorBinds -> "InterlinearMarkLineSpacingFloor"
+                    else -> "CjkBodyLineHeightDefault"
+                },
             )
         }
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
@@ -1596,6 +1608,7 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun List<ClusterMetricDecision>.lineMetrics(
         explicitLineHeight: Float?,
+        defaultLineHeight: Float,
         spacingFloor: Float = 0f,
     ): ResolvedLineMetrics {
         if (isEmpty()) {
@@ -1609,11 +1622,13 @@ class ExplainableStubParagraphLayoutEngine(
         val ascent = maxOf { it.layoutMetrics.ascent }
         val descent = maxOf { it.layoutMetrics.descent }
         val naturalHeight = ascent + descent
-        // InterlinearMarkLineSpacingFloor: the floor binds line SPACING
-        // (height − naturalHeight) — CLREQ「不应小于」, so an explicit
-        // lineHeight below it is clamped, not silently honoured.
+        // Height = the explicit value, else the CjkBodyLineHeightDefault, but
+        // never below naturalHeight + InterlinearMarkLineSpacingFloor — that
+        // minimum keeps glyph ink and 行间标点 from overlapping the next line
+        // (CLREQ「不应小于」). So an explicit lineHeight overrides the body
+        // default downward, but is still clamped up to the no-overlap minimum.
         val minHeight = naturalHeight + spacingFloor
-        val height = (explicitLineHeight ?: minHeight).coerceAtLeast(minHeight)
+        val height = (explicitLineHeight ?: defaultLineHeight).coerceAtLeast(minHeight)
         val extraLeading = (height - naturalHeight).coerceAtLeast(0f)
 
         return ResolvedLineMetrics(
@@ -1927,6 +1942,15 @@ private const val EMPHASIS_DOT_CENTER_EM = 0.34f
  * a filled circle of this size so it fits the line gap. Matches the AWT raster.
  */
 private const val EMPHASIS_DOT_DIAMETER_EM = 0.22f
+
+/**
+ * `CjkBodyLineHeightDefault`: 中文正文默认行高 1.5em(行距约 0.5em),无显式
+ * [ParagraphStyle.lineHeight] 时生效。1.0em 实贴会让真墨迹(ascent≈0.94em)与
+ * 相邻行碰头,且正文常规需要行距呼吸。CLREQ 的标点 floor 是「有行间标点时的
+ * 下限」,与本默认取 max:单面装 0.5em floor 正好被本默认吸收,双面装 0.625em
+ * 仍可顶高。显式 lineHeight 可向下覆盖本默认(仍不低于不重叠下限)。
+ */
+private const val DEFAULT_BODY_LINE_HEIGHT_EM = 1.5f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2

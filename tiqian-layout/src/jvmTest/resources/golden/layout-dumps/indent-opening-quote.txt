@@ -2,7 +2,7 @@ fixture: indent-opening-quote
 text: “好咖啡要趁热喝。”他说完便把杯子推了过来，让大家依次尝一口。
 maxWidth: 192.0
 == greedy ==
-size 192.0x48.0
+size 192.0x72.0
 kinsoku measure=12.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:12字→Basic+Hang
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=136.0 visual=160.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+2.7,CjkInterChar@1+2.7,CjkInterChar@2+2.7,CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7,CjkInterChar@6+2.7,CjkInterChar@7+2.7,CjkInterChar@8+2.7
 line[1] 10-22 natural=192.0 adjusted=184.0 visual=192.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@10+0.7,CjkInterChar@11+0.7,CjkInterChar@12+0.7,CjkInterChar@13+0.7,CjkInterChar@14+0.7,CjkInterChar@15+0.7,CjkInterChar@16+0.7,CjkInterChar@17+0.7,CjkInterChar@18+0.7,CjkInterChar@19+0.7,CjkInterChar@20+0.7
@@ -84,8 +84,9 @@ edgetrim 9-10 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 0-1 side=leading trim=8.0 reason=LineStartHalfWidthPunctuation
 edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 30-31 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
-size 192.0x48.0
+size 192.0x72.0
 kinsoku measure=12.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:12字→Basic+Hang
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=136.0 visual=160.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+2.7,CjkInterChar@1+2.7,CjkInterChar@2+2.7,CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7,CjkInterChar@6+2.7,CjkInterChar@7+2.7,CjkInterChar@8+2.7
 line[1] 10-22 natural=192.0 adjusted=184.0 visual=192.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@10+0.7,CjkInterChar@11+0.7,CjkInterChar@12+0.7,CjkInterChar@13+0.7,CjkInterChar@14+0.7,CjkInterChar@15+0.7,CjkInterChar@16+0.7,CjkInterChar@17+0.7,CjkInterChar@18+0.7,CjkInterChar@19+0.7,CjkInterChar@20+0.7
@@ -167,3 +168,4 @@ edgetrim 9-10 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 0-1 side=leading trim=8.0 reason=LineStartHalfWidthPunctuation
 edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 30-31 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
