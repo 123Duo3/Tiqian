@@ -12,6 +12,7 @@ import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import ink.duo3.tiqian.layout.LookaheadLineBreaker
+import ink.duo3.tiqian.shaping.skia.SkiaFontMetricsResolver
 import ink.duo3.tiqian.shaping.skia.SkiaTextShaper
 import kotlin.math.ceil
 
@@ -78,6 +79,7 @@ fun rememberParagraphMeasurer(
             ExplainableStubParagraphLayoutEngine(
                 lineBreaker = LookaheadLineBreaker(),
                 textShaper = SkiaTextShaper(),
+                fontMetricsResolver = SkiaFontMetricsResolver(),
                 clreqProfileResolver = { profile },
             ),
         )

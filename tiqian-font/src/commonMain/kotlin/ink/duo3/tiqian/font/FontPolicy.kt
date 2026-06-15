@@ -242,6 +242,16 @@ data class RawFontMetrics(
     val descent: Float,
     val leading: Float = 0f,
     val source: FontMetricSource = FontMetricSource.RawTables,
+    /**
+     * Font-declared typographic box (OpenType `OS/2` sTypoAscender/Descender),
+     * as positive magnitudes above/below the baseline. For CJK fonts this is
+     * the clean ideographic em (e.g. Source Han 0.88 / 0.12 = 1.000em), unlike
+     * the inflated hhea-derived [ascent]/[descent]. `null` when the font has no
+     * `OS/2` table → the normalizer falls back to [ascent]/[descent].
+     * See ADR 0002 amendment.
+     */
+    val typoAscent: Float? = null,
+    val typoDescent: Float? = null,
 )
 
 data class LayoutFontMetrics(

@@ -944,7 +944,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun usesNormalizedIdeographicMetricsForCjkLineBox() {
+    fun usesFontDeclaredTypoBoxForCjkLineBox() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -954,13 +954,14 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         val line = result.lines.single()
-        assertEquals(8f, line.baseline)
+        // ADR 0002 amendment: real baseline at the typo ascent (0.88em), not the
+        // em centre; box height = sTypo 0.88 + 0.12 = 1em.
+        assertEquals(14.08f, line.baseline)
         assertEquals(16f, line.bottom)
         val cjk = result.debug.metricDecisions.first { it.role == "CjkText" }
-        assertEquals(18.4f, cjk.rawAscent)
-        assertEquals(8f, cjk.layoutAscent)
-        assertEquals(8f, cjk.layoutDescent)
-        assertEquals("IdeographicCentered", cjk.baselineClass)
+        assertEquals(14.08f, cjk.layoutAscent)
+        assertEquals(1.92f, cjk.layoutDescent)
+        assertEquals("IdeographicLow", cjk.baselineClass)
         assertEquals("IdeographicEmBox", cjk.metricBox)
     }
 

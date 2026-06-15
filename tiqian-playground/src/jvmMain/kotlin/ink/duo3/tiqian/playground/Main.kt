@@ -130,8 +130,9 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     val cjkFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.cjk, fontSize)
     val latinFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.latin, fontSize)
 
-    // Same canvas padding logic as the AWT raster: engine line boxes use
-    // CenteredCjkVisual metrics, real font ascent/descent overflow them.
+    // Same canvas padding logic as the AWT raster: engine line boxes use the
+    // font-declared typo box (ADR 0002 amendment); the wider hhea ink can still
+    // overflow it, so pad for that.
     val fontAscent = maxOf(-cjkFont.metrics.ascent, -latinFont.metrics.ascent)
     val fontDescent = maxOf(cjkFont.metrics.descent, latinFont.metrics.descent)
     val engineBaseline = result.lines.firstOrNull()?.baseline ?: (fontSize / 2f)
@@ -217,9 +218,10 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
     val cjkFont = Font(PlaygroundFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
     val latinFont = Font(PlaygroundFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
 
-    // Engine uses CenteredCjkVisual metrics: baseline at em/2, line height = em.
-    // Real AWT fonts have asymmetric ascent/descent (≈14/4 at 16px) so glyph
-    // ink overflows the engine line box top by `fontAscent - engine.ascent`
+    // Engine lays the CJK box on the font-declared typo metrics on the real
+    // baseline (ADR 0002 amendment). The wider hhea ink (≈18.6/4.6 vs typo
+    // 14/2 at 16px) still overflows the engine line box top by
+    // `fontAscent - engine.ascent`
     // and the bottom by `fontDescent - engine.descent`. Pad the canvas so the
     // ink fits inside the PNG instead of getting clipped at y=0 / y=height.
     val measureCtx = FontRenderContext(AffineTransform(), true, true)

@@ -17,10 +17,15 @@ class StubFontMetricsResolver : FontMetricsResolver {
             FontRole.CjkText,
             FontRole.CjkPunctuation,
             -> RawFontMetrics(
-                ascent = request.fontSize * 1.15f,
-                descent = request.fontSize * 0.25f,
+                // hhea-style inflated box (kept for the no-OS/2 fallback path);
+                // typo* is the font-declared ideographic em the layout uses.
+                // Mirrors Source Han Sans CN (see FontProvidedMetricsProbe).
+                ascent = request.fontSize * 1.16f,
+                descent = request.fontSize * 0.288f,
                 leading = 0f,
                 source = FontMetricSource.RawTables,
+                typoAscent = request.fontSize * 0.88f,
+                typoDescent = request.fontSize * 0.12f,
             )
 
             FontRole.LatinText -> RawFontMetrics(
@@ -57,17 +62,27 @@ class ScriptAwareFontMetricsNormalizer : FontMetricsNormalizer {
         return when (request.role) {
             FontRole.CjkText,
             FontRole.CjkPunctuation,
-            -> LayoutFontMetrics(
-                ascent = request.fontSize * 0.5f,
-                descent = request.fontSize * 0.5f,
-                baselineOffset = 0f,
-                policy = FontMetricsPolicy.IdeographicBox,
-                baselinePolicy = BaselinePolicy.CenteredCjkVisual,
-                baselineClass = BaselineClass.IdeographicCentered,
-                metricBox = MetricBox.IdeographicEmBox,
-                source = FontMetricSource.SynthesizedIdeographicBox,
-                reason = "ScriptAwareFontMetricsNormalizer:${request.role}:ideographic-centered",
-            )
+            -> {
+                // ADR 0002 amendment: the CJK line box is the font's DECLARED
+                // ideographic em (OS/2 sTypo), on the real baseline — not a
+                // synthesized symmetric square centred on a fake baseline. When
+                // the font lacks OS/2 typo metrics, fall back to the (inflated)
+                // hhea box rather than inventing one; ink sampling is a separate
+                // bad-font fallback, not this path.
+                val typo = input.rawMetrics.typoAscent != null && input.rawMetrics.typoDescent != null
+                LayoutFontMetrics(
+                    ascent = input.rawMetrics.typoAscent ?: input.rawMetrics.ascent,
+                    descent = input.rawMetrics.typoDescent ?: input.rawMetrics.descent,
+                    baselineOffset = 0f,
+                    policy = if (typo) FontMetricsPolicy.IdeographicBox else FontMetricsPolicy.Raw,
+                    baselinePolicy = BaselinePolicy.Ideographic,
+                    baselineClass = BaselineClass.IdeographicLow,
+                    metricBox = MetricBox.IdeographicEmBox,
+                    source = input.rawMetrics.source,
+                    reason = "ScriptAwareFontMetricsNormalizer:${request.role}:" +
+                        if (typo) "font-typo-box" else "hhea-fallback-no-os2",
+                )
+            }
 
             FontRole.LatinText -> LayoutFontMetrics(
                 ascent = input.rawMetrics.ascent,

@@ -51,3 +51,40 @@ Latin text                 -> BaselineClass.Roman              + MetricBox.RawFo
 - OpenType BASE 表读取作为 `FontMetricSource.OpenTypeBase` 后续补齐。
 - variable font axis / hinting 对采样的影响需要在 ADR 之外有专门 fixture。
 - 竖排时 baseline class 切换为 `IdeographicCentered` 的竖排变种，policy 名字保持稳定。
+
+## Amendment (2026-06-16)：CenteredCjkVisual 合成框 → 字体声明的度量
+
+原决策的 `CenteredCjkVisual + IdeographicEmBox` 在实现里退化成了**写死的对称方块**
+（`ascent = descent = 0.5em`，`source = SynthesizedIdeographicBox`），既没做本 ADR
+原计划的「代表汉字采样估算」，也没读字体。后果：
+
+- 「基线」被钉在 em 正中，而 Skia/AWT 实际把字画在字体真基线上——引擎模型的基线
+  与渲染基线错位 0.38em，汉字在行内偏上，着重号/示亡号框（已硬编码 `0.88/0.12`
+  的真字面框）与 line box 互相矛盾。
+- 字身框被当成正方形，而汉字字身框本不对称。
+
+实测系统字体 Source Han Sans CN（`FontProvidedMetricsProbe`）确认字体**直接声明**了
+干净的表意度量：`OS/2 sTypoAscender/Descender = 0.880 / −0.120`（合 1.000em，非对称），
+`BASE` 表 `ideo` 基线 −0.120、字面框 `icfb/icft = −0.074 / 0.834`，而 hhea 是
+1.448em 的「偏大」框。
+
+**修订决策**：
+
+```text
+CJK text / CJK punctuation -> 用字体声明的表意框（首选 OS/2 sTypoAscender/Descender），
+                              真基线（罗马基线），不再合成对称方块、不再把基线放 em 正中。
+```
+
+- `RawFontMetrics` 增 `typoAscent/typoDescent`（OS/2 sTypo，缺失则回落 hhea ascent/descent）。
+- `ScriptAwareFontMetricsNormalizer` 的 CJK 分支改为透传 typo 框，`baselineClass`
+  从 `IdeographicCentered` 改为 `IdeographicLow`（表意基线在罗马基线下方），`source`
+  反映来自字体表而非合成。
+- 新增 `SkiaFontMetricsResolver`（读 OS/2 sTypo），Compose measurer 注入它；
+  `StubFontMetricsResolver` 同步提供 typo 字段以保持 golden 走真模型。AWT/Android
+  resolver 同构后补。
+- **墨迹采样（`GlyphBoundsSampled`）降级为字体缺 OS/2/BASE 时的劣质字体兜底**，不再是
+  主路径。
+- `BaselinePolicy.CenteredCjkVisual` / `BaselineClass.IdeographicCentered` /
+  `FontMetricSource.SynthesizedIdeographicBox` 三个枚举值**弃用**（保留以兼容旧 dump）。
+- `BASE` 表 `icfb/icft` 字面框接入 resolver、替换示亡号/着重号里硬编码的 `0.88/0.12`
+  常量、以及行距/着重号净空按真字面收紧，列为后续 slice。

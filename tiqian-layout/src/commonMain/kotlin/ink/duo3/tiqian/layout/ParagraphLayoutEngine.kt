@@ -1028,12 +1028,11 @@ class ExplainableStubParagraphLayoutEngine(
      * Anchor = the point the dot INK CENTRE must land on: x is the glyph
      * centre (final position minus the trailing justification delta), y is
      * `baseline + EMPHASIS_DOT_CENTER_EM·em`. The drop is baseline-relative,
-     * NOT em-box-relative: CenteredCjkVisual gives the em box an artificial
-     * 0.5em descent while real Han ink ends ≈0.1em below the baseline — an
-     * em-box-relative drop landed the dots inside the NEXT line's ink.
-     * 0.45em keeps clear daylight under the character face (字面底
-     * baseline+0.12em; ≈2px clearance at
-     * 16px) and clears the next line even at lineHeight 1.0. Renderers
+     * NOT descent-relative: real Han ink ends ≈0.12em below the baseline (the
+     * font-declared typo descent, ADR 0002 amendment), so anchoring the dot to
+     * the box bottom would land it inside the NEXT line's ink. 0.45em keeps
+     * clear daylight under the character face (字面底 baseline+0.12em; ≈2px
+     * clearance at 16px) and clears the next line even at lineHeight 1.0. Renderers
      * measure their dot glyph's ink and align its centre here, so font
      * differences stay in the render layer.
      */

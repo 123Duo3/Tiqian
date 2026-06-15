@@ -157,8 +157,8 @@ data class LineSpacingDecisionInfo(
 
 /**
  * Per-line rectangle segment of a box-style decoration (示亡号, ADR 0018).
- * Vertical bounds derive from the RAW font ink metrics (the layout em box
- * is an artificial CenteredCjkVisual fiction that real glyph ink overflows).
+ * Vertical bounds hug the CJK character face (字面) on the real baseline —
+ * the same font-declared box the line metrics now use (ADR 0002 amendment).
  * `openStart`/`openEnd` mark segments that continue from/onto another line —
  * renderers leave that frame edge undrawn.
  */
