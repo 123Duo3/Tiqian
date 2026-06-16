@@ -27,16 +27,16 @@ import ink.duo3.tiqian.font.FontRole
  * Each [JustificationAllocation] targets a specific cluster: the delta is
  * understood as trailing space added to that cluster's advance.
  *
- * Tier-3 eligibility — `CjkOnlyInterCharBoundary`: 平均拉大字距 is UNIFORM
- * TRACKING over every CJK↔CJK boundary（汉字↔汉字、汉字↔标点的任一侧、
- * 标点↔标点——含已折叠的相邻标点对）, all at the same share. Collapsed or
- * trimmed punctuation blanks are never PREFERENTIALLY refilled (their
- * original width is gone for good), but they take the uniform share like
- * every other position — the user-ratified reading of「加空白也是跟其他
- * 一样尽量均匀地加」. Excluded: any boundary touching a Latin-role cluster
- * — intra-word letter spacing does not exist as a tier at all, punctuation↔
- * Latin never stretches（「中文标点与西文之间不加间距」）, and ideograph↔
- * alpha belongs to tier 2.
+ * Tier-3 eligibility — UNIFORM TRACKING over every remaining 字符间距 at the
+ * same share: 汉字↔汉字、汉字↔标点的任一侧、标点↔标点（含已折叠的相邻标点对），
+ * AND `PunctuationLatinInterChar`: 标点↔西文（a 标点 face abutting a Western
+ * word）— CLREQ tier ③「剩余所有字符间距」excludes only 不可断标点字间距 and
+ * 连接号/分隔号前后, NOT 标点↔西文. Collapsed or trimmed punctuation blanks are
+ * never PREFERENTIALLY refilled (their original width is gone for good), but
+ * they take the uniform share like every other position — the user-ratified
+ * reading of「加空白也是跟其他一样尽量均匀地加」. Excluded: 汉字↔西文 (that is
+ * 中西间距, tier 2) and 西文↔西文 (word distance is tier 1, intra-word letter
+ * spacing is never a tier).
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
@@ -183,13 +183,21 @@ class Justifier(
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
         // 3. CjkInterChar — last resort: EVEN expansion across boundaries
-        // （CLREQ「平均拉大字距」）, uncapped (equal per-boundary capacity =
-        // the whole remaining deficit, so proportional allocation degenerates
-        // to an exact even split that always fills the line).
-        // `CjkOnlyInterCharBoundary`: uniform tracking over EVERY CJK↔CJK
-        // boundary — punctuation solid sides and collapsed pairs included,
-        // all at the same share (no preferential refill of trimmed blanks;
-        // see class doc). Latin-touching boundaries never qualify.
+        // （CLREQ「剩余所有字符间距，同时、同等量拉伸」）, uncapped (equal
+        // per-boundary capacity = the whole remaining deficit, so proportional
+        // allocation degenerates to an exact even split that always fills the
+        // line). Uniform tracking over EVERY remaining 字符间距 — punctuation
+        // solid sides and collapsed pairs included, all at the same share (no
+        // preferential refill of trimmed blanks; see class doc). Eligible:
+        //   - CJK↔CJK（汉字、标点任一侧、标点↔标点）;
+        //   - `PunctuationLatinInterChar`: 标点↔西文 — a 标点 face abutting a
+        //     Western word IS 剩余字符间距 too (CLREQ tier ③ excludes only
+        //     不可断标点 + 连接号/分隔号, NOT 标点↔西文). Only 汉字↔西文 stays
+        //     out — that is 中西间距, handled by tier ② above.
+        // Excluded: 西文↔西文 (word distance is tier ①, intra-word never), and
+        // the 连接号/分隔号 boundaries.
+        fun isWesternWord(idx: Int): Boolean =
+            clusterRoles[idx] == FontRole.LatinText && adjustedClusters[idx].text.any { it != ' ' }
         val cjkInterOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
             lineClusterRange = lineClusterRange,
@@ -197,7 +205,12 @@ class Justifier(
             priority = 3,
             capacity = remaining,
         ) { leftIdx, rightIdx ->
-            clusterRoles[leftIdx].isCjkLike() && clusterRoles[rightIdx].isCjkLike() &&
+            val l = clusterRoles[leftIdx]
+            val r = clusterRoles[rightIdx]
+            val bothCjk = l.isCjkLike() && r.isCjkLike()
+            val punctWestern = (l == FontRole.CjkPunctuation && isWesternWord(rightIdx)) ||
+                (isWesternWord(leftIdx) && r == FontRole.CjkPunctuation)
+            (bothCjk || punctWestern) &&
                 // AvoidStretchAroundConnectors: boundaries touching 连接号/
                 // 分隔号 stay closed（CLREQ 拉伸限制②）.
                 leftIdx !in avoidStretchClusters && rightIdx !in avoidStretchClusters

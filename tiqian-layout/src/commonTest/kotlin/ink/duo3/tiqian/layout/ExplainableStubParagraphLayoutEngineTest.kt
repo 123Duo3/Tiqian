@@ -1393,11 +1393,10 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun justifyNeverStretchesPunctuationLatinBoundary() {
-        // CjkOnlyInterCharBoundary:「中文标点与西文之间不加间距」also under
-        // justification. Line 0 = 中文中文话：The — the ：|The boundary must
-        // get no CjkInterChar share even though the colon's trailing side is
-        // glue; the hanzi boundaries absorb the whole deficit instead.
+    fun justifyStretchesPunctuationLatinBoundaryInTierThree() {
+        // CLREQ tier ③「剩余所有字符间距」includes 标点↔西文 (only 不可断标点 +
+        // 连接号/分隔号 excluded). Line 0 = 中文中文话：The — the ：|The boundary
+        // takes a tier-③ share like every other 字符间距.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -1411,8 +1410,8 @@ class ExplainableStubParagraphLayoutEngineTest {
             .first { it.lineRange.start == 0 }
         val colonRange = ink.duo3.tiqian.core.TextRange(5, 6)
         assertTrue(
-            line0.allocations.none { it.clusterRange == colonRange },
-            "：|The boundary must not stretch: ${line0.allocations}",
+            line0.allocations.any { it.clusterRange == colonRange && it.kind == "CjkInterChar" },
+            "：|The boundary must stretch in tier ③: ${line0.allocations}",
         )
         assertEquals(0f, line0.deficitAfter)
     }

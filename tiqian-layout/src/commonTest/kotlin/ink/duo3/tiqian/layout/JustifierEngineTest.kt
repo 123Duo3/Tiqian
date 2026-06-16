@@ -243,12 +243,12 @@ class JustifierEngineTest {
     }
 
     @Test
-    fun cjkLatinSpaceFiresOnlyAtIdeographAlphaBoundaryNotPunctuation() {
+    fun bracketWesternInteriorStretchesInTierThreeNotTierTwo() {
         // text = "中文（Hello）中文中文"; stub Latin advance = 5em = 80.
         // maxWidth=170 → line 0 = 中文（Hello）中 (160), deficit 10.
-        // （→Hello and Hello→） are CjkPunctuation↔Latin boundaries: neither
-        // CjkLatinSpace (ideograph-alpha only) nor CjkInterChar (needs CJK on
-        // both sides) may open them — the bracket interior stays tight.
+        // （→Hello and Hello→） are 标点↔西文 boundaries: NOT 中西间距 (tier ②,
+        // ideograph-alpha only), but they ARE 剩余字符间距 (tier ③, CLREQ
+        // 「剩余所有字符间距」), so the bracket interior DOES open.
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中文（Hello）中文中文"),
@@ -261,11 +261,12 @@ class JustifierEngineTest {
         )
         assertEquals(2, result.lines.size)
         val decision = result.debug.justificationDecisions.single()
+        // Tier ② (中西间距) still fires only on ideograph↔alpha, never punctuation.
         assertTrue(decision.allocations.none { it.kind == "CjkLatinSpace" })
-        // No expansion may target the bracket inner sides: （ cluster (2-3)
-        // and the Latin cluster (3-8).
-        assertTrue(decision.allocations.none { it.clusterRange.start == 2 })
-        assertTrue(decision.allocations.none { it.clusterRange.start == 3 })
+        // …but （→Hello (（ at offset 2) and Hello→） (Hello at offset 3) take a
+        // tier-③ share — 标点两侧含朝西文那侧都参与.
+        assertTrue(decision.allocations.any { it.kind == "CjkInterChar" && it.clusterRange.start == 2 })
+        assertTrue(decision.allocations.any { it.kind == "CjkInterChar" && it.clusterRange.start == 3 })
     }
 
     @Test
@@ -292,6 +293,32 @@ class JustifierEngineTest {
             "every 中西 stretch lands on a typed space cluster, not a boundary",
         )
         assertTrue(sino.all { it.delta == sino.first().delta }, "同时、同等量")
+    }
+
+    @Test
+    fun punctuationToWesternBoundaryStretchesInTierThree() {
+        // 「World」 mid-line, justified: CLREQ tier ③「剩余所有字符间距」includes
+        // 标点↔西文 (only 不可断标点 + 连接号/分隔号 are excluded), so the
+        // bracket's Western-facing face stretches like every other 字符间距.
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("你好「World」你好你好你"),
+                constraints = LayoutConstraints(maxWidth = 140f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        val alloc = result.debug.justificationDecisions.first().allocations
+        // 「↔World boundary (「 at source offset 2) takes a tier-③ share.
+        assertTrue(
+            alloc.any { a ->
+                a.kind == "CjkInterChar" &&
+                    result.clusters.first { it.range.start == a.clusterRange.start }.text == "「"
+            },
+            "标点↔西文 boundary must stretch in tier ③",
+        )
     }
 
     @Test
