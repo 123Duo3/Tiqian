@@ -1,6 +1,8 @@
 package ink.duo3.tiqian.shaping.skia
 
+import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.LayoutResult
+import ink.duo3.tiqian.core.LineBox
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontMgr
@@ -99,40 +101,90 @@ fun drawTiqianGlyphs(
     baselineOffset: Float = 0f,
 ) {
     val language = result.input.textStyle.locale
-    val autoSpaceGap = 0.25f * result.input.textStyle.fontSize
-    val leadingConsumed = result.debug.geometryDecisions
-        .filter { it.leadingGlueConsumed > 0f }
-        .associate { it.range to it.leadingGlueConsumed }
+    result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset) { _, cluster, drawX, baselineY, font ->
+        shapeTextBlob(shaper, cluster.displayText, font, language)?.let { blob ->
+            canvas.drawTextBlob(blob, drawX, baselineY, paint)
+        }
+    }
+    // LineEndHangingHyphen (ADR 0029): a hyphen hangs just past the content at a
+    // mid-word line end (content end x = indent + visualWidth).
     for (line in result.lines) {
-        val lineClusters = result.clusters.filter {
-            it.range.start >= line.range.start && it.range.end <= line.range.end
-        }
-        var x = line.indent
-        val baselineY = line.baseline + baselineOffset
-        for ((indexInLine, cluster) in lineClusters.withIndex()) {
-            val role = result.debug.fontDecisions.firstOrNull {
-                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
-            }?.role
-            val font = if (role == "LatinText") latinFont else cjkFont
-            val hasLeadingGap = result.debug.autoSpaceDecisions
-                .any { it.clusterRange == cluster.range && it.side == "leading" }
-            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
-            if (cluster.displayText.isNotEmpty()) {
-                val leadingShift = leadingConsumed[cluster.range] ?: 0f
-                shapeTextBlob(shaper, cluster.displayText, font, language)?.let { blob ->
-                    canvas.drawTextBlob(blob, x + leadingGap - leadingShift, baselineY, paint)
-                }
-            }
-            x += cluster.advance
-        }
-        // LineEndHangingHyphen (ADR 0029): a hyphen hangs just past the content
-        // at a mid-word line end. x is now indent + visualWidth (content end).
         if (line.hyphenAdvance > 0f) {
             shapeTextBlob(shaper, "-", latinFont, language)?.let { blob ->
-                canvas.drawTextBlob(blob, x, baselineY, paint)
+                canvas.drawTextBlob(blob, line.indent + line.visualWidth, line.baseline + baselineOffset, paint)
             }
         }
     }
+}
+
+/**
+ * The single positioned-cluster walk shared by drawing and skip-ink intercepts
+ * (they must not drift). Yields each non-empty cluster with its canvas draw
+ * origin: x stepping is the engine's resolved `cluster.advance`; a CJK↔Latin
+ * Insert gap (autospace leading) shifts right a quarter em; consumed leading
+ * glue shifts left.
+ */
+internal inline fun LayoutResult.forEachPositionedCluster(
+    cjkFont: Font,
+    latinFont: Font,
+    baselineOffset: Float,
+    action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, font: Font) -> Unit,
+) {
+    val autoSpaceGap = 0.25f * input.textStyle.fontSize
+    val leadingConsumed = debug.geometryDecisions
+        .filter { it.leadingGlueConsumed > 0f }
+        .associate { it.range to it.leadingGlueConsumed }
+    for (line in lines) {
+        val lineClusters = clusters.filter { it.range.start >= line.range.start && it.range.end <= line.range.end }
+        var x = line.indent
+        val baselineY = line.baseline + baselineOffset
+        for ((indexInLine, cluster) in lineClusters.withIndex()) {
+            val role = debug.fontDecisions.firstOrNull {
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role
+            val font = if (role == "LatinText") latinFont else cjkFont
+            val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
+            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
+            if (cluster.displayText.isNotEmpty()) {
+                action(line, cluster, x + leadingGap - (leadingConsumed[cluster.range] ?: 0f), baselineY, font)
+            }
+            x += cluster.advance
+        }
+    }
+}
+
+/**
+ * Canvas x-intervals where glyph ink on [line] crosses the horizontal band
+ * `[bandTop, bandBottom]` (canvas y) — Skia's own `TextBlob.getIntercepts`,
+ * which is the `text-decoration-skip-ink` primitive (precise, glyph-outline
+ * based). Returns a flat `[s0, e0, s1, e1, …]` so the renderer can break an
+ * underline/wavy line around descenders that cross it.
+ */
+fun LayoutResult.lineInkSkipIntervals(
+    line: LineBox,
+    cjkFont: Font,
+    latinFont: Font,
+    shaper: Shaper,
+    bandTop: Float,
+    bandBottom: Float,
+): FloatArray {
+    val language = input.textStyle.locale
+    val out = mutableListOf<Float>()
+    forEachPositionedCluster(cjkFont, latinFont, 0f) { l, cluster, drawX, baselineY, font ->
+        if (l !== line) return@forEachPositionedCluster
+        val blob = shapeTextBlob(shaper, cluster.displayText, font, language) ?: return@forEachPositionedCluster
+        // getIntercepts wants the band in the blob's baseline-relative y; the
+        // returned x is blob-local → offset by the cluster's draw origin.
+        val cuts = blob.getIntercepts(bandTop - baselineY, bandBottom - baselineY)
+            ?: return@forEachPositionedCluster
+        var i = 0
+        while (i + 1 < cuts.size) {
+            out += drawX + cuts[i]
+            out += drawX + cuts[i + 1]
+            i += 2
+        }
+    }
+    return out.toFloatArray()
 }
 
 /**

@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
+import ink.duo3.tiqian.shaping.skia.lineInkSkipIntervals
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.shaper.Shaper
@@ -52,13 +53,28 @@ internal fun DrawScope.drawParagraph(
                 mode = org.jetbrains.skia.PaintMode.STROKE
                 strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
             }
+            // text-decoration-skip-ink (Compose lacks it): break the 行间线 around
+            // any glyph ink that crosses it, via Skia's getIntercepts. For pure
+            // CJK the line sits below the face → no intercepts → continuous; it
+            // matters for Western descenders inside a 专名号/书名号 span.
+            val skipPad = framePaint.strokeWidth.coerceAtLeast(1f)
             for (seg in result.debug.decorationSegments) {
                 when (seg.kind) {
-                    "ProperNoun" ->
-                        skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
+                    "ProperNoun" -> {
+                        val skips = result.lineInkSkipIntervals(
+                            result.lines[seg.lineIndex], cjkFont, latinFont, shaper, seg.top - skipPad, seg.top + skipPad,
+                        )
+                        keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                            skCanvas.drawLine(x0, seg.top, x1, seg.top, framePaint)
+                        }
+                    }
                     "BookTitle" -> {
-                        val path = ink.duo3.tiqian.shaping.skia.wavyLinePath(seg.left, seg.right, seg.top, fontSize)
-                        skCanvas.drawPath(path, framePaint)
+                        val skips = result.lineInkSkipIntervals(
+                            result.lines[seg.lineIndex], cjkFont, latinFont, shaper, seg.top - skipPad, seg.top + skipPad,
+                        )
+                        keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                            skCanvas.drawPath(ink.duo3.tiqian.shaping.skia.wavyLinePath(x0, x1, seg.top, fontSize), framePaint)
+                        }
                     }
                     else -> {
                         skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
@@ -70,5 +86,34 @@ internal fun DrawScope.drawParagraph(
             }
         }
     }
+}
+
+/**
+ * Draws the KEPT runs of `[left, right]` — i.e. the whole span minus the [skips]
+ * intervals (flat `[s0,e0,…]`, each padded by [gap] and merged) — invoking
+ * [draw] per kept run. This is the skip-ink break: ink intervals are the gaps.
+ */
+private inline fun keptIntervals(
+    left: Float,
+    right: Float,
+    skips: FloatArray,
+    gap: Float,
+    draw: (Float, Float) -> Unit,
+) {
+    val merged = ArrayList<FloatArray>()
+    var i = 0
+    while (i + 1 < skips.size) {
+        val s = (skips[i] - gap).coerceIn(left, right)
+        val e = (skips[i + 1] + gap).coerceIn(left, right)
+        if (e > s) merged += floatArrayOf(s, e)
+        i += 2
+    }
+    merged.sortBy { it[0] }
+    var cursor = left
+    for (iv in merged) {
+        if (iv[0] > cursor + 0.5f) draw(cursor, iv[0])
+        cursor = maxOf(cursor, iv[1])
+    }
+    if (cursor < right - 0.5f) draw(cursor, right)
 }
 
