@@ -2,7 +2,7 @@ fixture: mourning-frame
 text: 悼念：王小明同志、张大同同志。
 maxWidth: 72.0
 == greedy ==
-size 64.0x144.0
+size 64.0x120.0
 grid container=72.0 measure=64.0(4字) slack=8.0 body=Start@0.0
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 natural=48.0 adjusted=40.0 visual=64.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+12.0,CjkInterChar@1+12.0
@@ -49,11 +49,11 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=ExplicitLineHeight
-decobox 3-6 kind=Mourning line=1 rect=0.0,35.2,48.0,51.2 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,92.8,48.0,108.8 open=-/- reason=MourningSpanKeptUnbroken
+linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+decobox 3-6 kind=Mourning line=1 rect=0.0,28.0,48.0,44.0 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,76.0,48.0,92.0 open=-/- reason=MourningSpanKeptUnbroken
 == lookahead ==
-size 64.0x144.0
+size 64.0x120.0
 grid container=72.0 measure=64.0(4字) slack=8.0 body=Start@0.0
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 natural=48.0 adjusted=40.0 visual=64.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+12.0,CjkInterChar@1+12.0
@@ -100,6 +100,6 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=ExplicitLineHeight
-decobox 3-6 kind=Mourning line=1 rect=0.0,35.2,48.0,51.2 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,92.8,48.0,108.8 open=-/- reason=MourningSpanKeptUnbroken
+linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+decobox 3-6 kind=Mourning line=1 rect=0.0,28.0,48.0,44.0 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,76.0,48.0,92.0 open=-/- reason=MourningSpanKeptUnbroken
