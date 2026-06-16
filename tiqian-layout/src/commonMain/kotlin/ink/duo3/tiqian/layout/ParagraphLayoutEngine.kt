@@ -535,8 +535,13 @@ class ExplainableStubParagraphLayoutEngine(
         // hanging but is an INDEPENDENT knob (ADR 0021 amendment).
         val explicitIndentEm = input.paragraphStyle.firstLineIndentEm
         val indentPolicy = input.paragraphStyle.firstLineIndentPolicy
-        val resolvedIndentEm = (explicitIndentEm ?: indentPolicy.resolveEm(measureEm)).coerceAtLeast(0f)
-        val firstLineIndent = resolvedIndentEm * fontSize
+        // 段落缩排 (block indent) insets EVERY line; 段首缩进 (firstLine) stacks on
+        // top, relative to the block, and MAY be negative (凸排：首行退回字头).
+        // Adaptive default is ≥0; an explicit value flows through as-is (incl.
+        // negative). The effective per-line indent is clamped ≥0 at use.
+        val blockIndent = input.paragraphStyle.blockIndentEm * fontSize
+        val resolvedIndentEm = explicitIndentEm ?: indentPolicy.resolveEm(measureEm)
+        val firstLineIndent = (blockIndent + resolvedIndentEm * fontSize).coerceAtLeast(0f)
         val firstLineIndentDecision = FirstLineIndentDecisionInfo(
             source = if (explicitIndentEm != null) "Explicit" else "MeasureAdaptiveFirstLineIndent",
             measureEm = measureEm,
@@ -598,8 +603,13 @@ class ExplainableStubParagraphLayoutEngine(
             lineBreaker.breakLines(
                 naturalClusters = naturalClusters,
                 adjustedClusters = clusters,
-                maxWidth = measure,
-                firstLineIndent = firstLineIndent,
+                // The breaker only needs per-line USABLE widths (via lineLimit):
+                // feed it the body width (measure − blockIndent) and a first-line
+                // indent relative to it. Rest lines then get the body width, line 0
+                // gets `measure − firstLineIndent`. Identical to before when
+                // blockIndent = 0; enables 段落缩排/凸排 with zero breaker changes.
+                maxWidth = measure - blockIndent,
+                firstLineIndent = firstLineIndent - blockIndent,
                 shrinkOpportunities = shrinkOpportunities,
                 // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
                 // whenever they fit (ADR 0018). NumberSymbolCohesion: CLREQ
@@ -666,7 +676,7 @@ class ExplainableStubParagraphLayoutEngine(
             lineSolution.lines.forEachIndexed { lineIndex, line ->
                 val hyphen = lineHyphenAdvanceAt(lineIndex)
                 if (hyphen <= 0f) return@forEachIndexed
-                val lineLimit = if (line.clusterRange.first == 0) measure - firstLineIndent else measure
+                val lineLimit = if (line.clusterRange.first == 0) measure - firstLineIndent else measure - blockIndent
                 val content = line.clusterRange.sumOf { clusters[it].advance.toDouble() }.toFloat()
                 var shortfall = content + hyphen - lineLimit
                 if (shortfall <= 0.001f) return@forEachIndexed
@@ -795,7 +805,7 @@ class ExplainableStubParagraphLayoutEngine(
                     maxWidth = (if (lineCandidate.clusterRange.first == 0) {
                         measure - firstLineIndent
                     } else {
-                        measure
+                        measure - blockIndent
                     }) - lineHyphenAdvanceAt(lineIndex),
                     fontSize = fontSize,
                     skip = false,
@@ -848,7 +858,7 @@ class ExplainableStubParagraphLayoutEngine(
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
-            val baseIndent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else 0f
+            val baseIndent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else blockIndent
             // LastLineAlignment: the last line is the paragraph's only
             // alignment degree of freedom (CLREQ 双齐 baseline). Center/End
             // express as an extra start-edge inset within the line's usable

@@ -97,6 +97,13 @@ data class ParagraphStyle(
      */
     val firstLineIndentEm: Float? = null,
     /**
+     * 整段缩进（CLREQ §6.2.1.2 段落缩排），in ems：**所有行**的始端都内移这么多
+     * （引用、诗词、标题块）。[firstLineIndentEm] 叠加在它之上、且**相对于它**，
+     * 可为负——`blockIndentEm = H, firstLineIndentEm = -H` 即「凸排」（首行齐头、
+     * 次行起缩 H）。每行有效缩进 = `(blockIndentEm + 该行 firstLine 部分)`，钳到 ≥0。
+     */
+    val blockIndentEm: Float = 0f,
+    /**
      * 段首缩进随行长自适应的默认策略（仅当 [firstLineIndentEm] 为 null 时
      * 生效）. See [MeasureAdaptiveFirstLineIndent].
      */

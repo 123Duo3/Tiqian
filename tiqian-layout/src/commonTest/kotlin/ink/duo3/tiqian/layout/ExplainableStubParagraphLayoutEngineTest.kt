@@ -1438,6 +1438,44 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun blockIndentInsetsEveryLine() {
+        // 段落缩排 (CLREQ §6.2.1.2): blockIndentEm insets ALL lines (引用/诗词块).
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文中文中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 100f),
+                paragraphStyle = ParagraphStyle(
+                    blockIndentEm = 2f,
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        assertTrue(result.lines.size >= 2)
+        assertTrue(result.lines.all { it.indent == 32f }, "every line inset 2em: ${result.lines.map { it.indent }}")
+    }
+
+    @Test
+    fun hangingIndentFlushesFirstLineAndInsetsRest() {
+        // 凸排 (CLREQ §6.2.1.1): blockIndent=2, firstLineIndent=-2 → 首行齐头、
+        // 次行起缩 2 字（对话/列表/法条）。
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文中文中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 100f),
+                paragraphStyle = ParagraphStyle(
+                    blockIndentEm = 2f,
+                    firstLineIndentEm = -2f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        assertTrue(result.lines.size >= 2)
+        assertEquals(0f, result.lines.first().indent)
+        assertTrue(result.lines.drop(1).all { it.indent == 32f }, "rest inset 2em: ${result.lines.map { it.indent }}")
+    }
+
+    @Test
     fun justifyFillsSaturatedLineWithUncappedEvenShare() {
         // CLREQ 平均拉大字距 has no upper bound: when word spaces and
         // sino-western gaps are exhausted, the remaining deficit spreads
