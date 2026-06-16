@@ -138,6 +138,12 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
 
 ### 8. 杂项（audit 级，暂不动）
 
+- **§6.2.1 段落调整（多段排版）**——已解决（Slice 22，2026-06-16）：引擎单段→
+  `ParagraphStyle.blockIndentEm`（整段缩进，`firstLineIndentEm` 相对叠加、可负）一改
+  覆盖 段首缩进/不缩/凸排（block H + first −H）/段落缩排（block B）；Compose `CjkText`
+  块/节文档模型（`CjkBlock.Paragraph(indent)`/`Section`，空行=节，跨段行距一致）。
+  breaker 零改动（喂正文宽 + 相对首行缩进）。**唯 §符号分离禁则·注释符号（上标/下标/
+  注释记号不可断）未做**——属注音/ruby 一族，随之走。
 - **数字+前后缀符号 符号分离禁则**——已解决（2026-06-16）：CLREQ §符号分离禁则
   「阿拉伯数字应作为整体不能拆成两行；百分/千分/度数（% ‰ ° ℃ ℉）与其前数字、
   正负号（+ - ±）与其后数字、货币符号（前置 ¥ / 后置 ₫）与数字 均不能断行」。
