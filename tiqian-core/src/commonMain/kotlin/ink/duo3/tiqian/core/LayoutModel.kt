@@ -173,6 +173,8 @@ data class RubyDecisionInfo(
     val baselineY: Float,
     val fontSize: Float,
     val overhang: Float,
+    /** 注文专用字体（family 名优先列表）；空 = 渲染器默认。 */
+    val fontFamilies: List<String> = emptyList(),
 )
 
 /**

@@ -79,4 +79,21 @@ class CjkAnnotatedTextTest {
         assertEquals(3, spans[0].end)
         assertEquals(Color.Red.toArgb(), spans[0].argb)
     }
+
+    @Test
+    fun rubySpansCarryReadingAndOptionalFont() {
+        val text = buildAnnotatedString {
+            append("我爱")
+            cjkRuby("北京", "Běijīng")
+            cjkRuby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
+        }
+        assertEquals("我爱北京中", text.text) // readings are NOT in the source
+        val spans = text.cjkRubySpans().sortedBy { it.baseRange.start }
+        assertEquals(2, spans.size)
+        assertEquals(TextRange(2, 4), spans[0].baseRange) // 北京
+        assertEquals("Běijīng", spans[0].text)
+        assertEquals(emptyList(), spans[0].fontFamilies) // default font
+        assertEquals("ㄓㄨㄥ", spans[1].text)
+        assertEquals(listOf("BpmfGenYoMin"), spans[1].fontFamilies) // 注音 font carried
+    }
 }

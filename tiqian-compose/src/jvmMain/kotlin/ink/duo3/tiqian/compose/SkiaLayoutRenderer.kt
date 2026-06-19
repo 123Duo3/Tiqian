@@ -95,7 +95,11 @@ internal fun DrawScope.drawParagraph(
         // base x-span the engine computed. We measure the real注文 width here so a
         // 注文 wider than the base overhangs symmetrically (v1; 避让 is a follow-up).
         for (ruby in result.debug.rubyDecisions) {
-            val rubyFont = Font(SkiaSystemTypefaces.latin, ruby.fontSize)
+            // 注文 uses its OWN font (注音 needs ㄅㄆㄇ glyphs; 拼音/释义 may differ) —
+            // resolved via the shared resolver, defaulting to the Latin face.
+            val tf = SkiaSystemTypefaces.typeface(isLatin = true, family = ruby.fontFamilies.firstOrNull(), style = org.jetbrains.skia.FontStyle.NORMAL)
+                ?: SkiaSystemTypefaces.latin
+            val rubyFont = Font(tf, ruby.fontSize)
             val width = rubyFont.measureTextWidth(ruby.text)
             shapeTextBlob(shaper, ruby.text, rubyFont, result.input.textStyle.locale)?.let { blob ->
                 skCanvas.drawTextBlob(blob, ruby.centerX - width / 2f, ruby.baselineY, paint)

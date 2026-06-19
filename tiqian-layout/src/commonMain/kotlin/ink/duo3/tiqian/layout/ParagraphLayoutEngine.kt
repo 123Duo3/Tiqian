@@ -1732,6 +1732,7 @@ class ExplainableStubParagraphLayoutEngine(
                         baselineY = lineBoxes[lineIndex].baseline - fontSize * RUBY_BASELINE_DROP_EM,
                         fontSize = rubyFontSize,
                         overhang = ((estRubyWidth - baseWidth) / 2f).coerceAtLeast(0f),
+                        fontFamilies = ruby.fontFamilies,
                     )
                 }
             }

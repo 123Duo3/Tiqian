@@ -40,6 +40,11 @@ data class DecorationSpan(
 data class RubySpan(
     val baseRange: TextRange,
     val text: String,
+    /**
+     * 注文专用字体（family 名优先列表）。注音需含 ㄅㄆㄇ 字形的字体、拼音/释义可
+     * 用各自的字体——注文字体本就该独立于正文（ADR 0032）。空 = 渲染器默认。
+     */
+    val fontFamilies: List<String> = emptyList(),
 )
 
 enum class DecorationKind {

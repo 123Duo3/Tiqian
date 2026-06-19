@@ -27,6 +27,9 @@ const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
 /** Annotation tag carrying 行间注 (ruby) annotation text over its base range. */
 const val CjkRubyTag = "ink.duo3.tiqian.ruby"
 
+/** Separates an optional ruby font family from the reading inside the annotation item. */
+private const val RubyFontSeparator = "\u001F"
+
 /**
  * Authors decorations as attributed text. Instead of counting source offsets
  * into a [DecorationSpan] (`TextRange(4, 16)`), wrap the span in [cjkEmphasis] /
@@ -75,18 +78,30 @@ fun CjkParagraph(
  * ```
  * CjkParagraph(buildAnnotatedString {
  *     append("我爱")
- *     cjkRuby("北京", "Běijīng")
+ *     cjkRuby("北京", "Běijīng")                               // 默认注文字体
+ *     cjkRuby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")      // 注音用 ㄅㄆㄇ 字体
  *     append("。")
  * })
  * ```
+ *
+ * [fontFamily] sets the 注文-ONLY font (注音 需含 ㄅㄆㄇ 字形的字体；拼音/释义 各取
+ * 所需，本就独立于正文)；null = 渲染器默认（ADR 0032）。
  */
-fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String) {
-    withAnnotation(CjkRubyTag, ruby) { append(base) }
+fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String, fontFamily: String? = null) {
+    val item = if (fontFamily != null) "$fontFamily$RubyFontSeparator$ruby" else ruby
+    withAnnotation(CjkRubyTag, item) { append(base) }
 }
 
-/** Extracts [RubySpan]s from the [CjkRubyTag] annotations (reading = annotation item). */
+/** Extracts [RubySpan]s from the [CjkRubyTag] annotations (optional `font‹US›reading` item). */
 fun AnnotatedString.cjkRubySpans(): List<RubySpan> =
-    getStringAnnotations(CjkRubyTag, 0, length).map { RubySpan(TextRange(it.start, it.end), it.item) }
+    getStringAnnotations(CjkRubyTag, 0, length).map {
+        val parts = it.item.split(RubyFontSeparator, limit = 2)
+        if (parts.size == 2) {
+            RubySpan(TextRange(it.start, it.end), parts[1], fontFamilies = listOf(parts[0]))
+        } else {
+            RubySpan(TextRange(it.start, it.end), it.item)
+        }
+    }
 
 /** Extracts [DecorationSpan]s from the [CjkDecorationTag] annotations. */
 fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
