@@ -58,7 +58,13 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
 - **双语强调**（汉字着重号 + 西文斜体）= B 档的自然产物：一个 emphasis span 里西文部分
   套 `Italic`。是否由 `Emphasis` 装饰**自动**给范围内西文 cluster 加斜体，作为 B 档的一个
   policy 定。
-- **列表**（左对齐标记 + 固定列正文）= 段落缩排（已有）+ 标记层，随 B 档一并做。
+- **列表**（✅ 已落地 2026-06-19，CLREQ §6.2.1.1 凸排）：`CjkBlock.List(items, marker, indent?, start)`
+  + `ListMarker`（`Decimal` `1.` / `CjkNumber` `一、` / `Circled` `①` / `Bullet` `•`）。
+  标记**左对齐顶格**于固定宽「标记列」(gutter)，正文整列缩进、续行同列对齐——Compose 侧
+  双列（gutter `Box` + 正文 `Row.weight`），**引擎零改动**，正文/标记都走 `CjkParagraph`。
+  列宽默认 **1 字**，自动按列表中**最宽标记**升到放得下它的最小整字数（如出现 `10.` → 2 字），
+  标记宽**实测**（`autoListGutterEm`，关 grid + 零缩进取裸宽，不靠数位数）；`indent` 非空则覆盖。
+  marker/正文都**零段首缩进**（gutter 是唯一缩进）。嵌套/富文本项是后续。
 
 ## Consequences
 

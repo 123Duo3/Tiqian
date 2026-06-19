@@ -1,16 +1,24 @@
 package ink.duo3.tiqian.compose
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.duo3.tiqian.clreq.ClreqProfile
+import ink.duo3.tiqian.core.LayoutConstraints
+import ink.duo3.tiqian.core.LineLengthGrid
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextStyle
+import kotlin.math.ceil
+import kotlin.math.max
 
 /** Mirrors the engine's default body line height (1.5em); used to size 节 gaps. */
 private const val BODY_LINE_HEIGHT_EM = 1.5f
@@ -51,6 +59,39 @@ fun CjkText(
                         measurer = measurer,
                     )
                 }
+                is CjkBlock.List -> {
+                    // 凸排列表：标记左对齐顶格于固定宽度的「标记列」(gutter)，正文整列
+                    // 缩进到列宽——续行自然落在同列。列宽 = 自定义值，否则自动：默认 1 字，
+                    // 但 1 字放不下列表里最宽的标记(如出现「10.」)时，整列升到放得下它的
+                    // 最小整字数(每项同列、对齐)。标记宽实测——是几字由字体说了算，不靠数位数。
+                    // Marker + body are FLUSH (the gutter is the only indent); the
+                    // paragraph 段首缩进 must not stack on top of the列.
+                    val listStyle = paragraphStyle.copy(firstLineIndentEm = 0f, blockIndentEm = 0f)
+                    val gutterEm = block.indent ?: autoListGutterEm(block, textStyle, listStyle, measurer)
+                    val gutterDp = with(LocalDensity.current) { (gutterEm * textStyle.fontSize).toDp() }
+                    val markerStyle = listStyle.copy(lineLengthGrid = LineLengthGrid(enabled = false))
+                    block.items.forEachIndexed { i, item ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Box(Modifier.width(gutterDp)) {
+                                CjkParagraph(
+                                    text = block.marker.format(block.start + i),
+                                    textStyle = textStyle,
+                                    paragraphStyle = markerStyle,
+                                    profile = profile,
+                                    measurer = measurer,
+                                )
+                            }
+                            CjkParagraph(
+                                text = item,
+                                modifier = Modifier.weight(1f),
+                                textStyle = textStyle,
+                                paragraphStyle = listStyle,
+                                profile = profile,
+                                measurer = measurer,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -82,8 +123,84 @@ sealed interface CjkBlock {
         val indent: ParagraphIndent = ParagraphIndent.FirstLine,
     ) : CjkBlock
 
+    /**
+     * 编号/项目列表（CLREQ §6.2.1.1 凸排）：标记 [marker] 左对齐顶格，正文缩进到固定
+     * 宽度的「标记列」，续行同列对齐。列宽默认 1 字，自动按列表中最宽标记升到放得下它
+     * 的最小整字数（[indent] 非空则直接用该字数覆盖）。[start] 是首项编号。
+     */
+    data class List(
+        val items: kotlin.collections.List<String>,
+        val marker: ListMarker = ListMarker.Decimal,
+        val indent: Float? = null,
+        val start: Int = 1,
+    ) : CjkBlock
+
     /** 空行 = 一节的结束（CLREQ）：renders as one blank line of space. */
     data object Section : CjkBlock
+}
+
+/**
+ * Auto 标记列宽（字）：1 字起，若 1 字放不下列表里最宽的标记，升到放得下它的最小整
+ * 字数。标记宽**实测**（标记是真文本，丢给引擎量，grid 关掉取自然宽），所以「10.」算
+ * 几字由字体决定，而非数位数。
+ */
+internal fun autoListGutterEm(
+    block: CjkBlock.List,
+    textStyle: TextStyle,
+    paragraphStyle: ParagraphStyle,
+    measurer: ParagraphMeasurer,
+): Float {
+    // Measure the BARE marker: no grid quantization and no 段首缩进 (a marker is
+    // flush), so the width is the glyphs alone — regardless of the caller's style.
+    val noGrid = paragraphStyle.copy(
+        lineLengthGrid = LineLengthGrid(enabled = false),
+        firstLineIndentEm = 0f,
+        blockIndentEm = 0f,
+    )
+    val widest = block.items.indices.maxOfOrNull { i ->
+        measurer.measure(
+            text = block.marker.format(block.start + i),
+            constraints = LayoutConstraints(maxWidth = 100_000f),
+            textStyle = textStyle,
+            paragraphStyle = noGrid,
+        ).size.width
+    } ?: 0f
+    return max(1, ceil(widest / textStyle.fontSize).toInt()).toFloat()
+}
+
+/** Formats a list item's marker text (CLREQ 凸排 列表). */
+sealed interface ListMarker {
+    fun format(n: Int): String
+
+    /** 阿拉伯数字 + 句点：`1.` `2.` … `10.`（最常见的编号列表）。 */
+    data object Decimal : ListMarker {
+        override fun format(n: Int): String = "$n."
+    }
+
+    /** 汉字数字 + 顿号：`一、` `二、` …（[suffix] 可改为 `）`/`.` 等）。 */
+    data class CjkNumber(val suffix: String = "、") : ListMarker {
+        override fun format(n: Int): String = cjkNumeral(n) + suffix
+    }
+
+    /** 带圈数字：`①` `②` …（1–20 用 U+2460 区，超出退回 `n.`）。 */
+    data object Circled : ListMarker {
+        override fun format(n: Int): String = if (n in 1..20) ('①' + (n - 1)).toString() else "$n."
+    }
+
+    /** 项目符号：默认 `•`，不随编号变（[glyph] 可改 `‧`/`·`/`◦` 等）。 */
+    data class Bullet(val glyph: String = "•") : ListMarker {
+        override fun format(n: Int): String = glyph
+    }
+}
+
+private val CJK_DIGITS = listOf("零", "一", "二", "三", "四", "五", "六", "七", "八", "九")
+
+/** 1–99 → 汉字数字（十、二十一…）；范围外退回阿拉伯数字。 */
+private fun cjkNumeral(n: Int): String = when {
+    n in 0..9 -> CJK_DIGITS[n]
+    n in 10..19 -> "十" + (if (n == 10) "" else CJK_DIGITS[n - 10])
+    n in 20..99 -> CJK_DIGITS[n / 10] + "十" + (if (n % 10 == 0) "" else CJK_DIGITS[n % 10])
+    else -> n.toString()
 }
 
 /**
