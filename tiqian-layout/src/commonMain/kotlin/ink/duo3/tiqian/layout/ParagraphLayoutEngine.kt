@@ -97,6 +97,17 @@ class ExplainableStubParagraphLayoutEngine(
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
+        // Rich-text per-span font size (ADR 0030 B 档): a cluster covered by a
+        // sized span SHAPES and is MEASURED at that span's size; the paragraph
+        // base still owns the structural em decisions (grid / 段首缩进) per the
+        // mixed-size 归属 rule. The boundary em decisions (中西间距、标点 glue) stay
+        // at base for now — the per-owner refinement is the documented follow-up.
+        val sizedSpans = input.content.spans.filter { it.range.start < it.range.end }
+        fun fontSizeAt(offset: Int): Float =
+            sizedSpans.lastOrNull { offset >= it.range.start && offset < it.range.end }?.style?.fontSize ?: fontSize
+        // Span edges force cluster splits so no cluster straddles a size change
+        // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
+        val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
         val clreqProfile = clreqProfileResolver.resolve(input.profileId)
         val context = FontRoleContext(
             locale = input.textStyle.locale,
@@ -159,7 +170,7 @@ class ExplainableStubParagraphLayoutEngine(
             fontRoleClassifier
         }
 
-        val clusterRanges = clusterRanges(text, effectiveClassifier, context, clreqProfile)
+        val clusterRanges = clusterRanges(text, effectiveClassifier, context, clreqProfile, spanBoundaries)
         val fontDecisions = clusterRanges.map { range ->
             val role = effectiveClassifier.classify(text, range, context)
             fallbackResolver.resolve(
@@ -183,11 +194,12 @@ class ExplainableStubParagraphLayoutEngine(
         fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
             val sourceText = text.substring(segmentRange.start, segmentRange.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
+            val segmentStyle = input.textStyle.copy(fontSize = fontSizeAt(segmentRange.start))
             val shaped = textShaper.shape(
                 ShapingInput(
                     text = text,
                     range = segmentRange,
-                    style = input.textStyle,
+                    style = segmentStyle,
                     fontDecision = decision,
                     displayText = substitution.displayText,
                 ),
@@ -200,7 +212,7 @@ class ExplainableStubParagraphLayoutEngine(
                     ShapingInput(
                         text = text,
                         range = segmentRange,
-                        style = input.textStyle,
+                        style = segmentStyle,
                         fontDecision = decision,
                         displayText = sourceText,
                     ),
@@ -466,7 +478,7 @@ class ExplainableStubParagraphLayoutEngine(
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
                 fontKey = decision.candidate.key,
-                fontSize = fontSize,
+                fontSize = fontSizeAt(decision.range.start),
                 role = decision.role,
                 locale = input.textStyle.locale,
             )
@@ -1270,6 +1282,7 @@ class ExplainableStubParagraphLayoutEngine(
         classifier: FontRoleClassifier,
         context: FontRoleContext,
         profile: ClreqProfile,
+        spanBoundaries: Set<Int> = emptySet(),
     ): List<TextRange> {
         val coalesceSet = profile.coalesceRepeatablePunctuation
         val ranges = mutableListOf<TextRange>()
@@ -1283,7 +1296,9 @@ class ExplainableStubParagraphLayoutEngine(
 
             index += charCount
             if (role == FontRole.LatinText) {
-                while (index < text.length) {
+                // A sized-span edge inside a Latin run / coalesced 标点 run ends the
+                // cluster there so each cluster carries a single font size (ADR 0030).
+                while (index < text.length && index !in spanBoundaries) {
                     val nextCodePoint = text.codePointAtCompat(index)
                     val nextCharCount = nextCodePoint.charCount()
                     val nextRange = TextRange(index, index + nextCharCount)
@@ -1291,7 +1306,7 @@ class ExplainableStubParagraphLayoutEngine(
                     index += nextCharCount
                 }
             } else if (role == FontRole.CjkPunctuation && codePoint in coalesceSet) {
-                while (index < text.length) {
+                while (index < text.length && index !in spanBoundaries) {
                     val nextCodePoint = text.codePointAtCompat(index)
                     if (nextCodePoint != codePoint) break
                     index += nextCodePoint.charCount()

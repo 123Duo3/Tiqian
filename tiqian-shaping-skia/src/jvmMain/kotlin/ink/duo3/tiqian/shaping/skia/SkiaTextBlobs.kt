@@ -94,6 +94,13 @@ fun shapeTextBlob(
 /** Per-span text color (ARGB) over a SOURCE range — rich-text 颜色 (ADR 0030 A 档). */
 data class ColorSpan(val start: Int, val end: Int, val argb: Int)
 
+/**
+ * Per-span font size (engine px) over a SOURCE range — rich-text 字号
+ * (ADR 0030 B 档). The engine shaped + measured these clusters at [size]; the
+ * renderer must draw them at the same size, hence the per-cluster sized font.
+ */
+data class FontSizeSpan(val start: Int, val end: Int, val size: Float)
+
 fun drawTiqianGlyphs(
     canvas: Canvas,
     result: LayoutResult,
@@ -103,12 +110,13 @@ fun drawTiqianGlyphs(
     shaper: Shaper,
     baselineOffset: Float = 0f,
     colorSpans: List<ColorSpan> = emptyList(),
+    fontSizeSpans: List<FontSizeSpan> = emptyList(),
 ) {
     val language = result.input.textStyle.locale
     // Color is render-only (no advance change), so it never touches the walk's
     // positioning — just the paint per cluster, by source offset.
     val paintByColor = HashMap<Int, org.jetbrains.skia.Paint>()
-    result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset) { _, cluster, drawX, baselineY, font ->
+    result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset, fontSizeSpans) { _, cluster, drawX, baselineY, font ->
         val argb = if (colorSpans.isEmpty()) {
             null
         } else {
@@ -143,9 +151,14 @@ internal inline fun LayoutResult.forEachPositionedCluster(
     cjkFont: Font,
     latinFont: Font,
     baselineOffset: Float,
+    fontSizeSpans: List<FontSizeSpan> = emptyList(),
     action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, font: Font) -> Unit,
 ) {
     val autoSpaceGap = 0.25f * input.textStyle.fontSize
+    val baseSize = input.textStyle.fontSize
+    // A cluster in a sized span draws through a font at THAT size (the engine
+    // shaped it so), keyed by (isLatin, size) to reuse the two base fonts as-is.
+    val sizedFonts = HashMap<Pair<Boolean, Float>, Font>()
     val leadingConsumed = debug.geometryDecisions
         .filter { it.leadingGlueConsumed > 0f }
         .associate { it.range to it.leadingGlueConsumed }
@@ -157,7 +170,12 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             val role = debug.fontDecisions.firstOrNull {
                 cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
             }?.role
-            val font = if (role == "LatinText") latinFont else cjkFont
+            val isLatin = role == "LatinText"
+            val baseFont = if (isLatin) latinFont else cjkFont
+            val size = if (fontSizeSpans.isEmpty()) baseSize else
+                fontSizeSpans.lastOrNull { cluster.range.start >= it.start && cluster.range.start < it.end }?.size ?: baseSize
+            val font = if (size == baseSize) baseFont
+                else sizedFonts.getOrPut(isLatin to size) { Font(baseFont.typeface, size) }
             val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
             val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
             if (cluster.displayText.isNotEmpty()) {

@@ -6,13 +6,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withAnnotation
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextRange
+import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.shaping.skia.ColorSpan
+import ink.duo3.tiqian.shaping.skia.FontSizeSpan
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
@@ -30,9 +34,9 @@ const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
  * })
  * ```
  *
- * [AnnotatedString.text] is the unchanged source (复制/搜索保真). Rich-text
- * [androidx.compose.ui.text.SpanStyle]s are ignored for now — they slot in when
- * the engine consumes `TiqianTextContent.spans` (see roadmap 富文本).
+ * [AnnotatedString.text] is the unchanged source (复制/搜索保真). `SpanStyle.color`
+ * (render-only) and `SpanStyle.fontSize` (layout-affecting, ADR 0030 B 档) map to
+ * the engine; weight/style/family are not consumed yet.
  */
 @Composable
 fun CjkParagraph(
@@ -43,6 +47,7 @@ fun CjkParagraph(
     profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
+    val fontSizeSpans = text.cjkFontSizeSpans(textStyle.fontSize)
     CjkParagraph(
         text = text.text,
         modifier = modifier,
@@ -51,6 +56,8 @@ fun CjkParagraph(
         profile = profile,
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
+        spans = fontSizeSpans.map { TextSpan(TextRange(it.start, it.end), TextStyle(fontSize = it.size)) },
+        fontSizeSpans = fontSizeSpans,
         measurer = measurer,
     )
 }
@@ -69,6 +76,20 @@ fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
 fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
     spanStyles.filter { it.item.color != Color.Unspecified }
         .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
+
+/**
+ * Extracts per-span font sizes (engine px) from `SpanStyle.fontSize` (rich-text
+ * 字号, ADR 0030 B 档). `.em` is relative to [base] (1.5.em = 1.5× base — the
+ * natural unit for inline emphasis); `.sp` is taken as engine px to match how
+ * the paragraph [TextStyle.fontSize] is supplied. Unspecified spans are dropped.
+ */
+fun AnnotatedString.cjkFontSizeSpans(base: Float): List<FontSizeSpan> =
+    spanStyles.filter { it.item.fontSize != TextUnit.Unspecified }
+        .map {
+            val unit = it.item.fontSize
+            val px = if (unit.type == TextUnitType.Em) base * unit.value else unit.value
+            FontSizeSpan(it.start, it.end, px)
+        }
 
 /** 着重号 over [block]'s text. */
 inline fun AnnotatedString.Builder.cjkEmphasis(crossinline block: AnnotatedString.Builder.() -> Unit) {

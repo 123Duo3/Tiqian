@@ -9,10 +9,12 @@ import androidx.compose.ui.layout.Layout
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import ink.duo3.tiqian.layout.LookaheadLineBreaker
 import ink.duo3.tiqian.shaping.skia.ColorSpan
+import ink.duo3.tiqian.shaping.skia.FontSizeSpan
 import ink.duo3.tiqian.shaping.skia.SkiaFontMetricsResolver
 import ink.duo3.tiqian.shaping.skia.SkiaTextShaper
 import kotlin.math.ceil
@@ -37,12 +39,14 @@ fun CjkParagraph(
     profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
     decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
     colorSpans: List<ColorSpan> = emptyList(),
+    spans: List<TextSpan> = emptyList(),
+    fontSizeSpans: List<FontSizeSpan> = emptyList(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
     Layout(
         modifier = modifier.drawBehind {
-            result.value?.let { drawParagraph(it, colorSpans = colorSpans) }
+            result.value?.let { drawParagraph(it, colorSpans = colorSpans, fontSizeSpans = fontSizeSpans) }
         },
         content = {},
     ) { _, constraints ->
@@ -57,6 +61,7 @@ fun CjkParagraph(
             textStyle = textStyle,
             paragraphStyle = paragraphStyle,
             decorations = decorations,
+            spans = spans,
         )
         result.value = laidOut
         layout(

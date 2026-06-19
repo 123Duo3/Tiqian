@@ -24,9 +24,18 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
 - 不走「合成加粗/斜体」：synthetic bold/oblique 会改墨宽却不改 advance，导致版面与绘制
   对不上——加粗/斜体一律归 B 档走真字体。
 
-**B. Layout-affecting（改 advance/度量）——后续增量，混排 em 规则已定（2026-06-17）。**
-- **字号、字体、字重、斜体**：每个 cluster 按其 span 的 font 真正 shape（advance 真）、
-  取真度量。
+**B. Layout-affecting（改 advance/度量）——混排 em 规则已定（2026-06-17）；字号已落地（2026-06-19）。**
+- **字号**（✅ 已落地）：sized span 内每个 cluster 按 span 字号真正 shape（advance 真）+
+  取真度量。实现：`TiqianTextContent.spans` 进引擎，span 边界强制切 cluster
+  （`clusterRanges` 不再吞掉 Latin 词 / 合并标点内的尺寸变化），`shapeSegment` 用
+  per-segment style、`FontMetricsRequest` 用 per-cluster 字号；renderer 按 `FontSizeSpan`
+  逐 cluster 取同尺寸 `Font` 绘制。Compose 作者面：`SpanStyle(fontSize = 1.8.em)`
+  （`.em` 相对段落基准，`.sp`/数值当引擎 px）。无 span 时全路径与旧 golden 逐字节一致。
+  - **v1 限定**：① 行高取**整段** cluster 度量的 max（一处放大 → 全段行距升高），**逐行**
+    行高是后续；② 边界 em 决策（中西间距、标点 glue）仍按**段落基准**，per-owner 细化是
+    后续；③ 因此 sized span **内含标点**时该标点 body/glue 仍是基准尺寸（少见，已知毛边）；
+    ④ 混排**基线对齐**沿用共享基线（ideographic/alphabetic），CLREQ 基线规则单独定。
+- **字体、字重、斜体**：每个 cluster 按其 span 的 font 真正 shape（advance 真）、取真度量。
 - **混排 em 决策的字号基准 = 该空白的「归属 cluster」的字号**（加性 glue 模型每条空白都有
   归属者）。CLREQ 已为关键决策指定了归属，不是「小的/前一个/段落」的全局选择：
   - **中西间距** = 1/4 **汉字宽**（CLREQ 原文）→ 归属那个**汉字**的字号（西文字号不进式子）；
