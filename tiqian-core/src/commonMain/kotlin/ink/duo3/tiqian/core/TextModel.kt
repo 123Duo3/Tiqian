@@ -14,6 +14,10 @@ data class TextStyle(
     val fontFamilies: List<String> = emptyList(),
     val fontSize: Float = 16f,
     val locale: String = "zh-Hans",
+    /** OpenType weight axis (400 = Regular, 700 = Bold); drives the shaped typeface. */
+    val fontWeight: Int = 400,
+    /** Slant axis: italic/oblique typeface when the family offers one (ADR 0030 B 档). */
+    val italic: Boolean = false,
 )
 
 /**

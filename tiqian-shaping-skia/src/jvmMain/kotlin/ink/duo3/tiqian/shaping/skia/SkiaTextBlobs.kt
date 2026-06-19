@@ -3,9 +3,12 @@ package ink.duo3.tiqian.shaping.skia
 import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.LineBox
+import ink.duo3.tiqian.core.TextSpan
+import ink.duo3.tiqian.core.TextStyle
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontSlant
 import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Point
 import org.jetbrains.skia.TextBlob
@@ -95,11 +98,12 @@ fun shapeTextBlob(
 data class ColorSpan(val start: Int, val end: Int, val argb: Int)
 
 /**
- * Per-span font size (engine px) over a SOURCE range — rich-text 字号
- * (ADR 0030 B 档). The engine shaped + measured these clusters at [size]; the
- * renderer must draw them at the same size, hence the per-cluster sized font.
+ * The Skia [FontStyle] for a layout-affecting [TextStyle] (ADR 0030 B 档): the
+ * OpenType weight axis + italic slant. Default (400, upright) equals
+ * [FontStyle.NORMAL], so unstyled clusters resolve the same typeface as before.
  */
-data class FontSizeSpan(val start: Int, val end: Int, val size: Float)
+fun TextStyle.toSkiaFontStyle(): FontStyle =
+    FontStyle(fontWeight, FontStyle.NORMAL.width, if (italic) FontSlant.ITALIC else FontSlant.UPRIGHT)
 
 fun drawTiqianGlyphs(
     canvas: Canvas,
@@ -110,13 +114,13 @@ fun drawTiqianGlyphs(
     shaper: Shaper,
     baselineOffset: Float = 0f,
     colorSpans: List<ColorSpan> = emptyList(),
-    fontSizeSpans: List<FontSizeSpan> = emptyList(),
+    spans: List<TextSpan> = emptyList(),
 ) {
     val language = result.input.textStyle.locale
     // Color is render-only (no advance change), so it never touches the walk's
     // positioning — just the paint per cluster, by source offset.
     val paintByColor = HashMap<Int, org.jetbrains.skia.Paint>()
-    result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset, fontSizeSpans) { _, cluster, drawX, baselineY, font ->
+    result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset, spans) { _, cluster, drawX, baselineY, font ->
         val argb = if (colorSpans.isEmpty()) {
             null
         } else {
@@ -151,14 +155,14 @@ internal inline fun LayoutResult.forEachPositionedCluster(
     cjkFont: Font,
     latinFont: Font,
     baselineOffset: Float,
-    fontSizeSpans: List<FontSizeSpan> = emptyList(),
+    spans: List<TextSpan> = emptyList(),
     action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, font: Font) -> Unit,
 ) {
     val autoSpaceGap = 0.25f * input.textStyle.fontSize
-    val baseSize = input.textStyle.fontSize
-    // A cluster in a sized span draws through a font at THAT size (the engine
-    // shaped it so), keyed by (isLatin, size) to reuse the two base fonts as-is.
-    val sizedFonts = HashMap<Pair<Boolean, Float>, Font>()
+    val baseStyle = input.textStyle
+    // A cluster covered by a layout-affecting span draws through a font at THAT
+    // size + weight + slant (the engine shaped it so), keyed to reuse instances.
+    val styledFonts = HashMap<String, Font>()
     val leadingConsumed = debug.geometryDecisions
         .filter { it.leadingGlueConsumed > 0f }
         .associate { it.range to it.leadingGlueConsumed }
@@ -172,10 +176,18 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             }?.role
             val isLatin = role == "LatinText"
             val baseFont = if (isLatin) latinFont else cjkFont
-            val size = if (fontSizeSpans.isEmpty()) baseSize else
-                fontSizeSpans.lastOrNull { cluster.range.start >= it.start && cluster.range.start < it.end }?.size ?: baseSize
-            val font = if (size == baseSize) baseFont
-                else sizedFonts.getOrPut(isLatin to size) { Font(baseFont.typeface, size) }
+            val style = spans.lastOrNull { cluster.range.start >= it.range.start && cluster.range.start < it.range.end }?.style
+            val font = if (style == null ||
+                (style.fontSize == baseStyle.fontSize && style.fontWeight == 400 && !style.italic)
+            ) {
+                baseFont
+            } else {
+                styledFonts.getOrPut("$isLatin:${style.fontSize}:${style.fontWeight}:${style.italic}") {
+                    val tf = if (style.fontWeight == 400 && !style.italic) baseFont.typeface
+                        else SkiaSystemTypefaces.styled(isLatin, style.toSkiaFontStyle()) ?: baseFont.typeface
+                    Font(tf, style.fontSize)
+                }
+            }
             val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
             val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
             if (cluster.displayText.isNotEmpty()) {
@@ -254,6 +266,20 @@ object SkiaSystemTypefaces {
     val latin: Typeface? by lazy {
         LATIN_CANDIDATES.firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, FontStyle.NORMAL) }
     }
+
+    private val styledCache = HashMap<Pair<Boolean, FontStyle>, Typeface?>()
+
+    /**
+     * First candidate (Latin or CJK) that matches [style] — the bold / italic
+     * instance the renderer needs for a styled span. CJK families rarely ship an
+     * italic, so `matchFamilyStyle` returns the nearest upright (no synthetic
+     * slant); weight axes (Regular/Bold) do resolve.
+     */
+    fun styled(isLatin: Boolean, style: FontStyle): Typeface? =
+        styledCache.getOrPut(isLatin to style) {
+            (if (isLatin) LATIN_CANDIDATES else CJK_CANDIDATES)
+                .firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, style) }
+        }
 }
 
 /**

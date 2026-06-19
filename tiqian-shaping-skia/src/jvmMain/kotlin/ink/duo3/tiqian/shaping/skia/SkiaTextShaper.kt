@@ -204,31 +204,23 @@ interface SkiaFontResolver {
 class SystemSkiaFontResolver(
     private val fontMgr: FontMgr = FontMgr.default,
 ) : SkiaFontResolver {
-    private val cjkTypeface: Typeface? =
-        SkiaSystemTypefaces.CJK_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
-    private val latinTypeface: Typeface? =
-        SkiaSystemTypefaces.LATIN_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
-
     override fun resolve(input: ShapingInput): Font {
+        // Weight/italic (ADR 0030 B 档) select the styled typeface so the SHAPED
+        // advances are the real bold/italic ones; default (400, upright) ==
+        // FontStyle.NORMAL → same typeface as before (golden-safe).
+        val fontStyle = input.style.toSkiaFontStyle()
         val requestedFamily = input.style.fontFamilies.firstOrNull()
             ?: input.fontDecision.candidate.family.takeUnless { it == input.fontDecision.candidate.key }
-        val typeface = requestedFamily?.let { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
-            ?: input.fontDecision.role.resolvedTypeface()
+        val typeface = requestedFamily?.let { fontMgr.matchFamilyStyle(it, fontStyle) }
+            ?: input.fontDecision.role.resolvedTypeface(fontStyle)
         return Font(typeface, input.style.fontSize)
     }
 
-    private fun FontRole.resolvedTypeface(): Typeface? =
-        when (this) {
-            FontRole.CjkText,
-            FontRole.CjkPunctuation,
-            -> cjkTypeface
-
-            FontRole.LatinText,
-            FontRole.Symbol,
-            FontRole.Emoji,
-            FontRole.Unknown,
-            -> latinTypeface
-        }
+    private fun FontRole.resolvedTypeface(style: FontStyle): Typeface? {
+        val isLatin = this == FontRole.LatinText || this == FontRole.Symbol ||
+            this == FontRole.Emoji || this == FontRole.Unknown
+        return SkiaSystemTypefaces.styled(isLatin, style)
+    }
 
 }
 

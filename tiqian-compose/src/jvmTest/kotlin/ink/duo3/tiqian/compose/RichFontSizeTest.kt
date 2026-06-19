@@ -53,4 +53,23 @@ class RichFontSizeTest {
         // The 2× cluster lifts the line height (paragraph-wide max metrics).
         assertTrue(sized.size.height > base.size.height, "a 2× span must grow the line height")
     }
+
+    @Test
+    fun boldSpanWidensLatinWord() {
+        val constraints = LayoutConstraints(maxWidth = 4000f)
+        val style = TextStyle(fontSize = 40f)
+        val regular = measurer.measure("Hamburgers", constraints, style)
+        val bold = measurer.measure(
+            "Hamburgers",
+            constraints,
+            style,
+            spans = listOf(TextSpan(TextRange(0, 10), TextStyle(fontSize = 40f, fontWeight = 700))),
+        )
+        fun latinWidth(r: ink.duo3.tiqian.core.LayoutResult) =
+            r.clusters.filter { it.range.start < 10 }.sumOf { it.advance.toDouble() }
+        // Bold shapes the bold typeface → the word measures wider (real advances,
+        // not synthetic). If the system lacks a distinct bold it ties, not fails.
+        assertTrue(latinWidth(bold) >= latinWidth(regular), "bold must not be narrower than regular")
+        assertTrue(latinWidth(bold) > latinWidth(regular), "bold ${latinWidth(bold)} should exceed regular ${latinWidth(regular)}")
+    }
 }

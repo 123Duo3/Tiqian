@@ -14,7 +14,6 @@ import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import ink.duo3.tiqian.layout.LookaheadLineBreaker
 import ink.duo3.tiqian.shaping.skia.ColorSpan
-import ink.duo3.tiqian.shaping.skia.FontSizeSpan
 import ink.duo3.tiqian.shaping.skia.SkiaFontMetricsResolver
 import ink.duo3.tiqian.shaping.skia.SkiaTextShaper
 import kotlin.math.ceil
@@ -40,13 +39,12 @@ fun CjkParagraph(
     decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
     colorSpans: List<ColorSpan> = emptyList(),
     spans: List<TextSpan> = emptyList(),
-    fontSizeSpans: List<FontSizeSpan> = emptyList(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
     Layout(
         modifier = modifier.drawBehind {
-            result.value?.let { drawParagraph(it, colorSpans = colorSpans, fontSizeSpans = fontSizeSpans) }
+            result.value?.let { drawParagraph(it, colorSpans = colorSpans, spans = spans) }
         },
         content = {},
     ) { _, constraints ->

@@ -97,15 +97,18 @@ class ExplainableStubParagraphLayoutEngine(
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
-        // Rich-text per-span font size (ADR 0030 B 档): a cluster covered by a
-        // sized span SHAPES and is MEASURED at that span's size; the paragraph
-        // base still owns the structural em decisions (grid / 段首缩进) per the
-        // mixed-size 归属 rule. The boundary em decisions (中西间距、标点 glue) stay
-        // at base for now — the per-owner refinement is the documented follow-up.
+        // Rich-text per-span style (ADR 0030 B 档): a cluster covered by a span
+        // SHAPES at that span's size + weight + slant, and is MEASURED at its
+        // size; the paragraph base still owns the structural em decisions (grid /
+        // 段首缩进) per the mixed-size 归属 rule. The boundary em decisions
+        // (中西间距、标点 glue) stay at base for now — per-owner is the follow-up.
+        // Each span's TextStyle is the FULLY-RESOLVED style (base + overrides),
+        // so unset fields already equal base.
         val sizedSpans = input.content.spans.filter { it.range.start < it.range.end }
-        fun fontSizeAt(offset: Int): Float =
-            sizedSpans.lastOrNull { offset >= it.range.start && offset < it.range.end }?.style?.fontSize ?: fontSize
-        // Span edges force cluster splits so no cluster straddles a size change
+        fun styleAt(offset: Int) =
+            sizedSpans.lastOrNull { offset >= it.range.start && offset < it.range.end }?.style ?: input.textStyle
+        fun fontSizeAt(offset: Int): Float = styleAt(offset).fontSize
+        // Span edges force cluster splits so no cluster straddles a style change
         // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
         val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
         val clreqProfile = clreqProfileResolver.resolve(input.profileId)
@@ -194,7 +197,7 @@ class ExplainableStubParagraphLayoutEngine(
         fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
             val sourceText = text.substring(segmentRange.start, segmentRange.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-            val segmentStyle = input.textStyle.copy(fontSize = fontSizeAt(segmentRange.start))
+            val segmentStyle = styleAt(segmentRange.start)
             val shaped = textShaper.shape(
                 ShapingInput(
                     text = text,

@@ -5,6 +5,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
@@ -16,7 +18,6 @@ import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.shaping.skia.ColorSpan
-import ink.duo3.tiqian.shaping.skia.FontSizeSpan
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
@@ -47,7 +48,6 @@ fun CjkParagraph(
     profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
-    val fontSizeSpans = text.cjkFontSizeSpans(textStyle.fontSize)
     CjkParagraph(
         text = text.text,
         modifier = modifier,
@@ -56,8 +56,7 @@ fun CjkParagraph(
         profile = profile,
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
-        spans = fontSizeSpans.map { TextSpan(TextRange(it.start, it.end), TextStyle(fontSize = it.size)) },
-        fontSizeSpans = fontSizeSpans,
+        spans = text.cjkStyleSpans(textStyle),
         measurer = measurer,
     )
 }
@@ -78,18 +77,44 @@ fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
         .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
 
 /**
- * Extracts per-span font sizes (engine px) from `SpanStyle.fontSize` (rich-text
- * 字号, ADR 0030 B 档). `.em` is relative to [base] (1.5.em = 1.5× base — the
- * natural unit for inline emphasis); `.sp` is taken as engine px to match how
- * the paragraph [TextStyle.fontSize] is supplied. Unspecified spans are dropped.
+ * Flattens the layout-affecting `SpanStyle`s (`fontSize` / `fontWeight` /
+ * `fontStyle`) into non-overlapping, fully-resolved [TextSpan]s for the engine +
+ * renderer (rich-text 字号/字重/斜体, ADR 0030 B 档). Each segment's style is
+ * [base] with the covering overrides applied (later spans win), so unset fields
+ * inherit the paragraph base — `.em` font size is relative to [base] (1.8.em =
+ * 1.8× base, the natural inline-emphasis unit), `.sp`/raw is engine px. Segments
+ * with no layout-affecting override are dropped (color rides [cjkColorSpans]).
  */
-fun AnnotatedString.cjkFontSizeSpans(base: Float): List<FontSizeSpan> =
-    spanStyles.filter { it.item.fontSize != TextUnit.Unspecified }
-        .map {
-            val unit = it.item.fontSize
-            val px = if (unit.type == TextUnitType.Em) base * unit.value else unit.value
-            FontSizeSpan(it.start, it.end, px)
+fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
+    val relevant = spanStyles.filter {
+        it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null || it.item.fontStyle != null
+    }
+    if (relevant.isEmpty()) return emptyList()
+    val bounds = sortedSetOf(0, length)
+    relevant.forEach { bounds += it.start; bounds += it.end }
+    val pts = bounds.toList()
+    val out = mutableListOf<TextSpan>()
+    for (i in 0 until pts.size - 1) {
+        val a = pts[i]
+        val b = pts[i + 1]
+        if (a >= b) continue
+        val covering = relevant.filter { it.start <= a && it.end >= b }
+        if (covering.isEmpty()) continue
+        var size = base.fontSize
+        var weight = base.fontWeight
+        var italic = base.italic
+        for (s in covering) {
+            val unit = s.item.fontSize
+            if (unit != TextUnit.Unspecified) {
+                size = if (unit.type == TextUnitType.Em) base.fontSize * unit.value else unit.value
+            }
+            s.item.fontWeight?.let { weight = it.weight }
+            s.item.fontStyle?.let { italic = it == FontStyle.Italic }
         }
+        out += TextSpan(TextRange(a, b), base.copy(fontSize = size, fontWeight = weight, italic = italic))
+    }
+    return out
+}
 
 /** 着重号 over [block]'s text. */
 inline fun AnnotatedString.Builder.cjkEmphasis(crossinline block: AnnotatedString.Builder.() -> Unit) {

@@ -35,7 +35,14 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
     行高是后续；② 边界 em 决策（中西间距、标点 glue）仍按**段落基准**，per-owner 细化是
     后续；③ 因此 sized span **内含标点**时该标点 body/glue 仍是基准尺寸（少见，已知毛边）；
     ④ 混排**基线对齐**沿用共享基线（ideographic/alphabetic），CLREQ 基线规则单独定。
-- **字体、字重、斜体**：每个 cluster 按其 span 的 font 真正 shape（advance 真）、取真度量。
+- **字重、斜体**（✅ 已落地 2026-06-19）：`TextStyle` 加 `fontWeight`/`italic`，shaper 按
+  `FontStyle(weight, slant)` 选**真**粗体/斜体 typeface → SHAPED advance 是真的（粗体更宽、
+  非合成）；renderer 同样按 per-cluster `FontStyle` 取 styled typeface 绘制。**度量不变**：
+  同一字族粗/斜共用纵向度量，行高不随字重/斜体变（正确）。CJK 多无斜体，`matchFamilyStyle`
+  退最近的正立体（不合成倾斜）——与「斜体只对西文有意义」一致。span 样式在 Compose 侧
+  **拍平**成无重叠、整解析的 `TextSpan`（base + 覆盖），故字号/字重/斜体/颜色可任意叠加。
+  默认 `(400, upright)` == `FontStyle.NORMAL` → 无 span 时 typeface 不变（golden 零漂移）。
+- **字体（family）**：仍是后续——`SpanStyle.fontFamily` → `TextStyle.fontFamilies` 的映射待接。
 - **混排 em 决策的字号基准 = 该空白的「归属 cluster」的字号**（加性 glue 模型每条空白都有
   归属者）。CLREQ 已为关键决策指定了归属，不是「小的/前一个/段落」的全局选择：
   - **中西间距** = 1/4 **汉字宽**（CLREQ 原文）→ 归属那个**汉字**的字号（西文字号不进式子）；

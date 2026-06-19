@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: 富文本接线（2026-06-19）——ADR 0030 **A 档颜色**（`SpanStyle.color`，纯渲染、零 golden 漂移）+ **B 档 字号**（`SpanStyle.fontSize`：`TiqianTextContent.spans` 进引擎，span 边界切 cluster，per-segment shaping + per-cluster 度量，renderer 按 `FontSizeSpan` 逐 cluster 同尺寸绘制；`.em` 相对段落基准）。混排 em 规则按「空白归属者字号」钉死（中西间距=汉字、标点=标点、grid/缩进=段落，边角取小）。v1 限定：行高取整段 max、边界 em 仍段落基准、基线共享——逐行行高 / per-owner glue / 基线对齐为后续。无 span 时逐字节同旧 golden
-Up next:        富文本续档：字体/字重/斜体（同一 per-cluster shaping 接线）+ 双语强调（汉字着重号 + 西文斜体）+ 列表（左对齐标记 + 段落缩排）。其间继续 dogfood `CjkParagraph`/`CjkText`。第二阶段（竖排 / web）等模型冻结、考虑 Rust core 后再起；西文连字零散后续：整段最优连字、Android 原生断词器接 `Hyphenator`
+Last completed: 富文本 per-span 样式（2026-06-19）——ADR 0030 **A 档颜色** + **B 档 字号/字重/斜体**：`TiqianTextContent.spans`（拍平成无重叠、整解析的 `TextSpan`，字号/字重/斜体/颜色可叠加）进引擎，span 边界切 cluster，per-segment shaping（按 `FontStyle(weight, slant)` 选真粗体/斜体 typeface，advance 真）+ per-cluster 度量；renderer 同样按 per-cluster `FontStyle`+字号取 styled typeface 绘制。混排 em 按「空白归属者字号」（中西间距=汉字、标点=标点、grid/缩进=段落，边角取小）。粗/斜共用纵向度量 → 行高不变。v1 限定：行高取整段 max、边界 em 仍段落基准、基线共享。无 span 时逐字节同旧 golden（默认 `(400,upright)`==`FontStyle.NORMAL`）
+Up next:        富文本收尾：**字体 family**（`SpanStyle.fontFamily`→`fontFamilies` 映射）+ **双语强调**（汉字着重号 + 西文斜体，由 `Emphasis` 装饰自动给范围内西文加斜）+ **列表**（左对齐标记 + 段落缩排）。其间继续 dogfood `CjkParagraph`/`CjkText`。第二阶段（竖排 / web）等模型冻结、考虑 Rust core 后再起；西文连字零散后续：整段最优连字、Android 原生断词器接 `Hyphenator`
 ```
 
 ## Slice / Milestone 对照表
@@ -45,7 +45,7 @@ Up next:        富文本续档：字体/字重/斜体（同一 per-cluster shap
 | 20 | — | 段首缩进随行长自适应（`MeasureAdaptiveFirstLineIndent`）：窄行<14 字缩 1 字、宽行 2 字，阈值独立于悬挂、`Fixed` 下仍生效；`firstLineIndentEm` 改 `Float?` 显式覆盖 | `firstLineIndentAdaptsToMeasure…` 单测；`adaptive-short-line-indent` fixture golden | golden diff + playground 目检 | done (ADR 0021 amendment；决策入 dump) |
 | 21 | — | 中西混排西文音节连字：`tiqian-linebreak` `Hyphenator`/`LiangHyphenator` + 内置 en-US TeX 模式；引擎 `LineEndHangingHyphen` 拆音节 cluster、行尾悬挂连字符（不占版心）；`LatinForcedHyphenBreak` 超宽片段补连字符硬断（前二后三）；**默认启用**（`defaultHyphenator()` expect/actual，JVM=en-US） | `LiangHyphenatorTest`/`EnglishHyphenationTest`/`HyphenationLayoutTest`；`western-hyphenation` / `latin-hard-break` fixture golden | golden + `:tiqian-linebreak:jvmTest` + playground 目检 | done (确定性测试 pin `NoHyphenator` ⇒ 既有 golden 零漂移；源文本不动；ADR 0029) |
 | 22 | — | §6.2.1 段落调整：`ParagraphStyle.blockIndentEm`（整段缩进，`firstLineIndentEm` 相对叠加、可负）覆盖 段首缩进/不缩/凸排/段落缩排；Compose `CjkText` 块/节文档模型（`CjkBlock.Paragraph(indent)`/`Section`，空行=节，每段独立 `ParagraphIndent`，跨段行距一致） | `blockIndentInsetsEveryLine`/`hangingIndentFlushesFirstLineAndInsetsRest` 单测；`CjkTextRenderTest`（凸排+段落缩排+节 同屏 PNG） | `:tiqian-layout:jvmTest` + `:tiqian-compose:jvmTest` + PNG 目检 | done (breaker 零改动——喂正文宽+相对首行缩进，`block=0` golden 零漂移；唯凸排「人名不足三字补空白」niche 未做) |
-| 23 | — | 富文本 per-span 样式（ADR 0030）：**A 档颜色**（`SpanStyle.color` 纯渲染、零引擎）+ **B 档 字号**（`SpanStyle.fontSize`：`TiqianTextContent.spans` 进引擎，span 边界切 cluster，per-segment shaping + per-cluster 度量，renderer `FontSizeSpan` 逐 cluster 同尺寸绘制，`.em` 相对段落基准）；混排 em 按归属者字号 | `colorSpansExtractedFromSpanStyle`/`spanColorsPaintTheirClusters`/`sizedSpanScalesAdvanceAndLineHeight` | `:tiqian-compose:jvmTest` + 全量 golden 零漂移 + PNG 目检 | done (无 span 时逐字节同旧 golden；v1 限定：行高整段 max、边界 em 段落基准、基线共享；字体/字重/斜体续档) |
+| 23 | — | 富文本 per-span 样式（ADR 0030）：**A 档颜色**（`SpanStyle.color` 纯渲染、零引擎）+ **B 档 字号/字重/斜体**（`SpanStyle.fontSize/fontWeight/fontStyle`：`TiqianTextContent.spans`〔Compose 侧拍平成无重叠整解析 `TextSpan`，四样可叠加〕进引擎，span 边界切 cluster，per-segment shaping〔`FontStyle(weight,slant)` 选真粗/斜 typeface，advance 真〕+ per-cluster 度量，renderer 同样按 per-cluster `FontStyle`+字号取 styled typeface；`.em` 相对段落基准）；混排 em 按归属者字号 | `colorSpansExtractedFromSpanStyle`/`spanColorsPaintTheirClusters`/`sizedSpanScalesAdvanceAndLineHeight`/`boldSpanWidensLatinWord` | `:tiqian-compose:jvmTest` + 全量 golden 零漂移 + PNG 目检（粗/斜/大/色叠加） | done (无 span 时逐字节同旧 golden〔默认 `(400,upright)`==`FontStyle.NORMAL`〕；粗/斜共用纵向度量→行高不变；v1 限定：行高整段 max、边界 em 段落基准、基线共享；字体 family 续档) |
 
 Slice 15 的依据（CLREQ 原文）：
 
