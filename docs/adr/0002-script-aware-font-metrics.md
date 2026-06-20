@@ -75,7 +75,7 @@ CJK text / CJK punctuation -> 用字体声明的表意框（首选 OS/2 sTypoAsc
                               真基线（罗马基线），不再合成对称方块、不再把基线放 em 正中。
 ```
 
-- `RawFontMetrics` 增 `typoAscent/typoDescent`——CJK **字面框**：per-edge **优先 BASE
+- `RawFontMetrics` 增 `typoAscent/typoDescent`——CJK **字身框**：per-edge **优先 BASE
   `ideo`(框底)/`idtp`(框顶),缺则回退 OS/2 sTypo,再缺回落 hhea**（amendment 2026-06-20,
   ADR 0033 账）。Source Han 上 BASE/sTypo 重合(0.88/0.12);此框同供行高 + 拼音 + 注音。
 - `ScriptAwareFontMetricsNormalizer` 的 CJK 分支改为透传 typo 框，`baselineClass`

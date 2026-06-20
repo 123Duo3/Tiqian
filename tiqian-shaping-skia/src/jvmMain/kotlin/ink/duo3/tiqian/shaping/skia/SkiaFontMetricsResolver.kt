@@ -14,7 +14,7 @@ import org.jetbrains.skia.Typeface
  *
  * - hhea-derived ascent/descent/leading from [Font.metrics] (the inflated box,
  *   kept for the no-`OS/2` fallback and overflow clamping);
- * - the CJK 字面框 → [RawFontMetrics.typoAscent] / [typoDescent], measured by
+ * - the CJK 字身框 → [RawFontMetrics.typoAscent] / [typoDescent], measured by
  *   PREFERRING the `BASE`-table ideographic em box (`ideo` bottom / `idtp` top)
  *   per edge, and falling back to `OS/2` sTypo when a BASE value is absent
  *   (ADR 0033 account). Source Han: `ideo`=−0.120, `idtp` absent → sTypoAsc
@@ -41,7 +41,7 @@ class SkiaFontMetricsResolver(
             val m = font.metrics
             val upm = typeface.unitsPerEm.takeIf { it > 0 } ?: 1000
             val scale = size / upm
-            // 字面框 (ADR 0002 amendment / ADR 0033 account): the CJK box used for the
+            // 字身框 (ADR 0002 amendment / ADR 0033 account): the CJK box used for the
             // line box + ruby + 注音 PREFERS the OpenType BASE ideographic em box
             // (`ideo` bottom / `idtp` top), per edge, and falls back to OS/2 sTypo when
             // a BASE value is absent. On Source Han `ideo`=−0.120 (=sTypoDesc) and
@@ -85,7 +85,7 @@ class SkiaFontMetricsResolver(
     /**
      * OpenType `BASE` table ideographic em-box edges for the horizontal axis:
      * (`ideo` = em-box bottom, `idtp` = em-box top), in FUnits, nullable per tag
-     * (Source Han carries `ideo` but not `idtp`). The 字面框 source of record;
+     * (Source Han carries `ideo` but not `idtp`). The 字身框 source of record;
      * OS/2 sTypo is the fallback (handled by the caller).
      */
     private fun baseIdeoIdtp(tf: Typeface): Pair<Int?, Int?> {

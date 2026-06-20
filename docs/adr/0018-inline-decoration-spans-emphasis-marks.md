@@ -58,7 +58,7 @@ Layout 在行/cluster 几何定稿后解析 span，产出
   （`carry-would-split-mourning-span`，落 LeaveRagged）；PushIn 的 offender
   恒为标点、不会在姓名 span 内，无需 guard。
 - **框几何（`DecorationSegmentInfo`）**：按行一段矩形，**紧贴字面、零边距**。
-  水平边贴 cluster 盒（右边去掉 justify delta）；竖直边取常规 CJK 字面框
+  水平边贴 cluster 盒（右边去掉 justify delta）；竖直边取常规 CJK 字身框
   `baseline - 0.88em .. baseline + 0.12em`。排除过的方案：layout em box
   （0.5/0.5 人为虚构，会切穿字形）、raw line metrics（含行间空隙，框会
   虚胖）、逐字 ink union（随字形起伏——`一` 会让框塌掉，名单中框高不一致）。
@@ -80,9 +80,9 @@ Layout 在行/cluster 几何定稿后解析 span，产出
   低于 floor 时 clamp（原文是「不应小于」）。单/双面装是**印刷正反面**
   属性，落为 `ParagraphStyle.printingSides`（屏幕渲染无背面，默认单面）。
   决策记入 `LayoutDebugInfo.lineSpacingDecision`，dump 增 `linespacing` 行。
-- **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字面底仅 0.12em，
+- **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字身底仅 0.12em，
   视觉上贴字。下移后点与字面有明确空隙，且在 floor 保证的行距带内
-  （点底 +0.56em < 下一行字面顶 +0.62em @1.5em 行高）。
+  （点底 +0.56em < 下一行字身顶 +0.62em @1.5em 行高）。
 
 ## Consequences
 

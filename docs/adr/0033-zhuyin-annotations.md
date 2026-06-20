@@ -7,7 +7,7 @@
 ## 实现状态
 
 输入侧（`RubyKind.Zhuyin`、`ZhuyinParser`、`cjkZhuyin`）+ 几何（`computeZhuyinDecisions`：30 份
-表映到字面框；纵横对齐每字 0.5em 预留）+ 绘制（符号填字面框；调号 CJK 字体 + 墨迹探测 → 缩到
+表映到字身框；纵横对齐每字 0.5em 预留）+ 绘制（符号填字身框；调号 CJK 字体 + 墨迹探测 → 缩到
 ink 宽 = 调号格 + 垂直居中）全部落地。`ZhuyinDecisionInfo` 入 dump。`ZhuyinLayoutTest` /
 `ZhuyinParserTest` 守。逐情况几何按 CLREQ 配图 render-verify 微调中。
 
@@ -78,11 +78,11 @@ ink 宽 = 调号格 + 垂直居中）全部落地。`ZhuyinDecisionInfo` 入 dum
 
 ## Decision / Mechanism
 
-- 度量（账已结 2026-06-20）：30 份参考系 = **字面框**，按 edge **优先 BASE `ideo`(框底)/
+- 度量（账已结 2026-06-20）：30 份参考系 = **字身框**，按 edge **优先 BASE `ideo`(框底)/
   `idtp`(框顶)，缺则回退 OS/2 sTypo**（`SkiaFontMetricsResolver.baseIdeoIdtp`）。实测 Source Han:
-  `ideo`=−0.120(=sTypoDesc)、`idtp` 缺失(→sTypoAsc 0.880),故与旧值一致、零漂移。该字面框
+  `ideo`=−0.120(=sTypoDesc)、`idtp` 缺失(→sTypoAsc 0.880),故与旧值一致、零漂移。该字身框
   同时供**行高 + 拼音 + 注音**(三者都读 `typoAscent/typoDescent`,改度量来源即全跟上)。
-  名分厘清:`icfb/icft` 才是内缩的真字面、`ideo/idtp` 是 1em em 框——本项目取后者作「字面框」基准。
+  名分厘清:`icfb/icft` 才是内缩的真字面、`ideo/idtp` 是 1em em 框——本项目取后者作「字身框」基准。
 - advance：注音 present ⇒ 每字右侧 `RubySpan`-driven 结构性预留 0.5em（复用 ADR 0032 的
   `rubySpreadByCluster` 思路，但这里是**每字**统一预留，纵横对齐）。
 - 绘制：每注音符号按 0.3em 字号画在其 9×9 份格；调号 5×5 / 轻声 2 高，按上表落位；都用

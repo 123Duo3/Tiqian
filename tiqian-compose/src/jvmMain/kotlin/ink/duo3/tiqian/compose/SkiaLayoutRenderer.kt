@@ -118,7 +118,7 @@ internal fun DrawScope.drawParagraph(
             for (p in z.placements) {
                 when (p.role) {
                     ink.duo3.tiqian.core.ZhuyinGlyphRole.Symbol -> {
-                        val f = Font(tf, p.height) // box height = symbol 字面框 (0.3em)
+                        val f = Font(tf, p.height) // box height = symbol 字身框 (0.3em)
                         // Centre by the VERT glyph's advance (not the plain glyph's — they
                         // can differ, e.g. half- vs full-width), since we draw the vert form.
                         val gids = vertGlyphIds(tf, shaper, p.text, result.input.textStyle.locale)

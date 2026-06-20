@@ -124,7 +124,7 @@ class ExplainableStubParagraphLayoutEngine(
         fun emphasisItalicAt(offset: Int): Boolean =
             emphasisRanges.any { offset >= it.start && offset < it.end }
         // 行间注 (ruby, ADR 0032): 注文 above the base; the band reserved in the line
-        // height is the注文 font's REAL ascent+descent stacked over the base 字面顶
+        // height is the注文 font's REAL ascent+descent stacked over the base 字身顶
         // (computed after metricDecisions below). advance handled by 避让.
         val rubyFontSize = fontSize * RUBY_FONT_EM
         // 拼音 (above-base) ruby only; 注音 (RubyKind.Zhuyin, right-side) is parsed +
@@ -597,9 +597,9 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        // 行间注 vertical placement (ADR 0032): stack the 注文 font's REAL 字面框
+        // 行间注 vertical placement (ADR 0032): stack the 注文 font's REAL 字身框
         // (ascent/descent at the ruby size, ADR 0002 amendment — no synthesized em)
-        // on top of the base 字面顶, with a small clearance. The band reserved in the
+        // on top of the base 字身顶, with a small clearance. The band reserved in the
         // line height = 注文 ascent+descent+gap; the注文 baseline drops below the base
         // baseline by 基字 ascent + 注文 descent + gap.
         val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
@@ -1239,7 +1239,7 @@ class ExplainableStubParagraphLayoutEngine(
      * NOT descent-relative: real Han ink ends ≈0.12em below the baseline (the
      * font-declared typo descent, ADR 0002 amendment), so anchoring the dot to
      * the box bottom would land it inside the NEXT line's ink. 0.45em keeps
-     * clear daylight under the character face (字面底 baseline+0.12em; ≈2px
+     * clear daylight under the character face (字身底 baseline+0.12em; ≈2px
      * clearance at 16px) and clears the next line even at lineHeight 1.0. Renderers
      * measure their dot glyph's ink and align its centre here, so font
      * differences stay in the render layer.
@@ -1861,7 +1861,7 @@ class ExplainableStubParagraphLayoutEngine(
     /**
      * 注音 geometry (ADR 0033): for each Zhuyin span, lay the ㄅㄆㄇ symbols (9×9 份)
      * and the 调号 (5×5 份 / 轻声) in the base's right-side 15-份 zone, mapping the
-     * 30-份 grid onto the base 字面框 (typo box). `ZhuyinParser` derives the tone.
+     * 30-份 grid onto the base 字身框 (typo box). `ZhuyinParser` derives the tone.
      */
     private fun computeZhuyinDecisions(
         rubySpans: List<RubySpan>,
@@ -2345,9 +2345,9 @@ private const val RUBY_FONT_EM = 0.5f
  */
 private const val RUBY_MIN_GAP_EM_OF_RUBY = 0.25f
 /**
- * Extra clearance between the注文 字面框底 and the base 字面框顶 — **default 0**:
- * the typo boxes already carry ink margins (汉字墨迹不顶字面顶、西文降部不到 descent
- * 底), so flush-stacking the real font 字面框 (ADR 0002「用字体声明度量」) already
+ * Extra clearance between the注文 字身框底 and the base 字身框顶 — **default 0**:
+ * the typo boxes already carry ink margins (汉字墨迹不顶字身顶、西文降部不到 descent
+ * 底), so flush-stacking the real font 字身框 (ADR 0002「用字体声明度量」) already
  * separates the ink. Bump only if a style wants looser ruby. (Placement itself is
  * the REAL ascent/descent, not a synthesized em.)
  */
@@ -2390,7 +2390,7 @@ private const val MOURNING_FRAME_FACE_ASCENT_EM = 0.88f
 private const val MOURNING_FRAME_FACE_DESCENT_EM = 0.12f
 
 /**
- * 行间线（专名号/书名号甲式）的横排 y：字面底 (+0.12em) 下方留一线空气
+ * 行间线（专名号/书名号甲式）的横排 y：字身底 (+0.12em) 下方留一线空气
  * （行间标点应尽量紧贴所标注汉字一侧），与着重号同现时点墨水上缘在
  * +0.34em——先线后点成立。
  */

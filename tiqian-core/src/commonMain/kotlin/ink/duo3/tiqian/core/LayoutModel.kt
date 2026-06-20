@@ -202,7 +202,7 @@ data class ZhuyinGlyphPlacement(
 )
 
 enum class ZhuyinGlyphRole {
-    /** ㄅㄆㄇ — fill the 9×9 box at the box font size (字面框). */
+    /** ㄅㄆㄇ — fill the 9×9 box at the box font size (字身框). */
     Symbol,
 
     /** 平上去/入声 调号 — ink-detect, scale ink width to the box, vertical-centre. */
