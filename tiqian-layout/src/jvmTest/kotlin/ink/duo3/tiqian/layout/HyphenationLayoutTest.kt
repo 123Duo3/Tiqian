@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.LineAdjustmentStrategy
 import ink.duo3.tiqian.core.LayoutConstraints
@@ -22,7 +24,7 @@ class HyphenationLayoutTest {
         maxWidth: Float = 160f,
     ) = ExplainableStubParagraphLayoutEngine(hyphenator = hyphenator).layout(
         LayoutInput(
-            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
             content = TiqianTextContent(content),
             constraints = LayoutConstraints(maxWidth = maxWidth),
         ),
@@ -37,7 +39,7 @@ class HyphenationLayoutTest {
         // opting in: "coffee" → cof-fee with a hanging hyphen.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文中 coffee"),
                 constraints = LayoutConstraints(maxWidth = 112f),
             ),
@@ -54,7 +56,7 @@ class HyphenationLayoutTest {
         val result = ExplainableStubParagraphLayoutEngine(hyphenator = EnglishHyphenation.enUs).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(
-                    firstLineIndentEm = 0f,
+                    firstLineIndent = Ic(0f),
                     lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
                 ),
                 content = TiqianTextContent("中文，internationalization"),
@@ -82,7 +84,7 @@ class HyphenationLayoutTest {
         ).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(
-                    firstLineIndentEm = 0f,
+                    firstLineIndent = Ic(0f),
                     lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
                 ),
                 content = TiqianTextContent("中文中文中文中文 coffee"),

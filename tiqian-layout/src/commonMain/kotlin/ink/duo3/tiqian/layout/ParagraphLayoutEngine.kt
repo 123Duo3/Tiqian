@@ -669,16 +669,17 @@ class ExplainableStubParagraphLayoutEngine(
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         // MeasureAdaptiveFirstLineIndent: the indent default narrows to 1 字 on
-        // short measures (< shortBelowEm 字); an explicit firstLineIndentEm
+        // short measures (< shortBelowEm 字); an explicit firstLineIndent (ic)
         // overrides. Threshold defaults to 14 字 like MeasureAdaptiveKinsoku's
         // hanging but is an INDEPENDENT knob (ADR 0021 amendment).
-        val explicitIndentEm = input.paragraphStyle.firstLineIndentEm
+        val explicitIndentEm = input.paragraphStyle.firstLineIndent?.count
         val indentPolicy = input.paragraphStyle.firstLineIndentPolicy
         // 段落缩排 (block indent) insets EVERY line; 段首缩进 (firstLine) stacks on
         // top, relative to the block, and MAY be negative (凸排：首行退回字头).
         // Adaptive default is ≥0; an explicit value flows through as-is (incl.
         // negative). The effective per-line indent is clamped ≥0 at use.
-        val blockIndent = input.paragraphStyle.blockIndentEm * fontSize
+        // `ic` resolves against the paragraph base 字身框 = fontSize (ADR 0034 段级锚点).
+        val blockIndent = input.paragraphStyle.blockIndent.toPx(fontSize)
         val resolvedIndentEm = explicitIndentEm ?: indentPolicy.resolveEm(measureEm)
         val firstLineIndent = (blockIndent + resolvedIndentEm * fontSize).coerceAtLeast(0f)
         val firstLineIndentDecision = FirstLineIndentDecisionInfo(

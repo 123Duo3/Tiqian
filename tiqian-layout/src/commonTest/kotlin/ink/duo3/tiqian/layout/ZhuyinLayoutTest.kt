@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
@@ -21,7 +23,7 @@ class ZhuyinLayoutTest {
         LayoutInput(
             content = TiqianTextContent("中文"),
             constraints = LayoutConstraints(maxWidth = 4000f),
-            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
             rubySpans = zhuyin,
         ),
     )
@@ -54,7 +56,7 @@ class ZhuyinLayoutTest {
             LayoutInput(
                 content = TiqianTextContent("中文"),
                 constraints = LayoutConstraints(maxWidth = 4000f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
             ),
         ).clusters.first().advance
         val withZhuyin = layout(listOf(RubySpan(TextRange(0, 1), "ㄓㄨㄥ", kind = RubyKind.Zhuyin)))

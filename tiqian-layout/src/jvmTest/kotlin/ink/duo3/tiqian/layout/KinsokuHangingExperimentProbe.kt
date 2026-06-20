@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.HangingPunctuationStyle
 import ink.duo3.tiqian.clreq.KinsokuLevel
@@ -74,7 +76,7 @@ class KinsokuHangingExperimentProbe {
                 LayoutInput(
                     content = TiqianTextContent(p),
                     constraints = LayoutConstraints(maxWidth = maxWidth),
-                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                    paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 ),
             )
             // Looseness over justified (non-last) lines.

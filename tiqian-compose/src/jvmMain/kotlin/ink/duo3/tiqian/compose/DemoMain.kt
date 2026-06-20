@@ -57,7 +57,7 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             text = text,
             modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            paragraphStyle = ParagraphStyle().copy(firstLineIndentEm = 0f)
+            paragraphStyle = ParagraphStyle().copy(firstLineIndent = ink.duo3.tiqian.core.Ic(0f))
         )
         CjkParagraph(
             text = PARAGRAPH,

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import ink.duo3.tiqian.core.TextStyle
+import ink.duo3.tiqian.core.ic
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -71,12 +72,12 @@ class CjkTextRenderTest {
         val blocks = listOf(
             CjkBlock.Paragraph(
                 "张三说道：今天天气不错，咱们出去走走吧，顺便买点咖啡豆回来配下午茶。",
-                ParagraphIndent.Hanging(2f),
+                ParagraphIndent.Hanging(2.ic),
             ),
             CjkBlock.Section,
             CjkBlock.Paragraph(
                 "他引用一句诗：采菊东篱下，悠然见南山，此中有真意，欲辨已忘言。",
-                ParagraphIndent.Block(2f),
+                ParagraphIndent.Block(2.ic),
             ),
             CjkBlock.Paragraph(
                 "回到正文，咖啡馆比咖啡更早地改变了城里人的作息与谈吐与往来。",

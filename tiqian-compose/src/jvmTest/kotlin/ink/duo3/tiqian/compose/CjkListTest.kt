@@ -3,6 +3,7 @@ package ink.duo3.tiqian.compose
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextStyle
+import ink.duo3.tiqian.core.ic
 import ink.duo3.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import ink.duo3.tiqian.layout.LookaheadLineBreaker
 import ink.duo3.tiqian.shaping.skia.SkiaFontMetricsResolver
@@ -43,14 +44,14 @@ class CjkListTest {
         fun gutter(count: Int) =
             autoListGutterEm(CjkBlock.List((1..count).map { "项" }, ListMarker.Decimal), ts, ps, measurer)
 
-        assertEquals(1f, gutter(9), "1.–9. fit one 字")
-        assertEquals(2f, gutter(10), "10. forces the whole列 to two 字")
+        assertEquals(1.ic, gutter(9), "1.–9. fit one 字")
+        assertEquals(2.ic, gutter(10), "10. forces the whole列 to two 字")
     }
 
     @Test
     fun explicitIndentOverridesAuto() {
         // The List carries the override; auto is only consulted when indent == null.
-        val list = CjkBlock.List(listOf("a", "b"), ListMarker.Decimal, indent = 3f)
-        assertEquals(3f, list.indent)
+        val list = CjkBlock.List(listOf("a", "b"), ListMarker.Decimal, indent = 3.ic)
+        assertEquals(3.ic, list.indent)
     }
 }

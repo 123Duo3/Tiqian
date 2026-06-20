@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
@@ -26,7 +28,7 @@ class AutoSpaceSingleGapTest {
         // their advance normalises from 1em (stub) to 0.25em.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文 CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -44,7 +46,7 @@ class AutoSpaceSingleGapTest {
         // normalises to a single 0.25em gap, same as one typed space.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文  CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -62,7 +64,7 @@ class AutoSpaceSingleGapTest {
         // Insert gap inside the word cluster (48 + 4 = 52).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文   CJK段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -80,7 +82,7 @@ class AutoSpaceSingleGapTest {
         // a 0.25em gap on each side. "CJK" nominal 48 → 48 + 4 + 4 = 56.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文CJK段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -103,7 +105,7 @@ class AutoSpaceSingleGapTest {
         // bracket: there must be no autospace decision for that boundary.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("Tiqian ）说明"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -120,7 +122,7 @@ class AutoSpaceSingleGapTest {
         // closing bracket `）` next to it does not cancel the firing.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("中文 shaping 之后"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
@@ -147,7 +149,7 @@ class AutoSpaceSingleGapTest {
         )
         val result = engine.layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("甲A乙9丙"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),

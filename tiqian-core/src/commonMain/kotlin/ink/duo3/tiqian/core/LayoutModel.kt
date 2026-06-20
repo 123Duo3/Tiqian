@@ -100,7 +100,7 @@ data class LayoutDebugInfo(
 
 /**
  * 段首缩进的解析：[source] = "MeasureAdaptiveFirstLineIndent"（按 [measureEm]
- * 字数自适应，< [thresholdEm] 字缩窄）或 "Explicit"（`firstLineIndentEm`
+ * 字数自适应，< [thresholdEm] 字缩窄）或 "Explicit"（`firstLineIndent`
  * 显式覆盖）；[resolvedEm] 是最终缩进字数。
  */
 data class FirstLineIndentDecisionInfo(

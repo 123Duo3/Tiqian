@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
@@ -39,7 +41,7 @@ class PunctuationBodyFloorInvariantTest {
                     LayoutInput(
                         content = TiqianTextContent(text),
                         constraints = LayoutConstraints(maxWidth = maxWidth),
-                        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                        paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                     ),
                 )
                 result.debug.geometryDecisions.forEach { geometry ->

@@ -13,9 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.duo3.tiqian.clreq.ClreqProfile
+import ink.duo3.tiqian.core.Ic
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LineLengthGrid
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.ic
 import ink.duo3.tiqian.core.TextStyle
 import kotlin.math.ceil
 import kotlin.math.max
@@ -27,7 +29,7 @@ private const val BODY_LINE_HEIGHT_EM = 1.5f
  * Lays out MULTIPLE paragraphs and sections (CLREQ §6.2.1 段落调整). Each
  * paragraph runs the engine via [CjkParagraph]; `CjkText` only splits the
  * source into blocks, maps each block's 段首缩排 style to the engine's
- * `blockIndentEm`/`firstLineIndentEm`, and stacks them.
+ * `blockIndent`/`firstLineIndent`, and stacks them.
  *
  * **行距段内段间一致**（CLREQ:「前段落末行、后段落首行与段落内行距一致」）成立于
  * 零 `Column` 间距：每个行盒上下各半 leading，相邻两段贴合后跨段 baseline 间距恰好
@@ -50,11 +52,11 @@ fun CjkText(
             when (block) {
                 is CjkBlock.Section -> Spacer(Modifier.height(sectionDp))
                 is CjkBlock.Paragraph -> {
-                    val (blockEm, firstEm) = block.indent.resolve(paragraphStyle.firstLineIndentEm)
+                    val (blockIc, firstIc) = block.indent.resolve(paragraphStyle.firstLineIndent)
                     CjkParagraph(
                         text = block.text,
                         textStyle = textStyle,
-                        paragraphStyle = paragraphStyle.copy(blockIndentEm = blockEm, firstLineIndentEm = firstEm),
+                        paragraphStyle = paragraphStyle.copy(blockIndent = blockIc, firstLineIndent = firstIc),
                         profile = profile,
                         measurer = measurer,
                     )
@@ -66,9 +68,9 @@ fun CjkText(
                     // 最小整字数(每项同列、对齐)。标记宽实测——是几字由字体说了算，不靠数位数。
                     // Marker + body are FLUSH (the gutter is the only indent); the
                     // paragraph 段首缩进 must not stack on top of the列.
-                    val listStyle = paragraphStyle.copy(firstLineIndentEm = 0f, blockIndentEm = 0f)
-                    val gutterEm = block.indent ?: autoListGutterEm(block, textStyle, listStyle, measurer)
-                    val gutterDp = with(LocalDensity.current) { (gutterEm * textStyle.fontSize).toDp() }
+                    val listStyle = paragraphStyle.copy(firstLineIndent = Ic.Zero, blockIndent = Ic.Zero)
+                    val gutterIc = block.indent ?: autoListGutterEm(block, textStyle, listStyle, measurer)
+                    val gutterDp = with(LocalDensity.current) { gutterIc.toPx(textStyle.fontSize).toDp() }
                     val markerStyle = listStyle.copy(lineLengthGrid = LineLengthGrid(enabled = false))
                     block.items.forEachIndexed { i, item ->
                         Row(Modifier.fillMaxWidth()) {
@@ -131,7 +133,7 @@ sealed interface CjkBlock {
     data class List(
         val items: kotlin.collections.List<String>,
         val marker: ListMarker = ListMarker.Decimal,
-        val indent: Float? = null,
+        val indent: Ic? = null,
         val start: Int = 1,
     ) : CjkBlock
 
@@ -149,13 +151,13 @@ internal fun autoListGutterEm(
     textStyle: TextStyle,
     paragraphStyle: ParagraphStyle,
     measurer: ParagraphMeasurer,
-): Float {
+): Ic {
     // Measure the BARE marker: no grid quantization and no 段首缩进 (a marker is
     // flush), so the width is the glyphs alone — regardless of the caller's style.
     val noGrid = paragraphStyle.copy(
         lineLengthGrid = LineLengthGrid(enabled = false),
-        firstLineIndentEm = 0f,
-        blockIndentEm = 0f,
+        firstLineIndent = Ic.Zero,
+        blockIndent = Ic.Zero,
     )
     val widest = block.items.indices.maxOfOrNull { i ->
         measurer.measure(
@@ -165,7 +167,7 @@ internal fun autoListGutterEm(
             paragraphStyle = noGrid,
         ).size.width
     } ?: 0f
-    return max(1, ceil(widest / textStyle.fontSize).toInt()).toFloat()
+    return max(1, ceil(widest / textStyle.fontSize).toInt()).ic
 }
 
 /** Formats a list item's marker text (CLREQ 凸排 列表). */
@@ -205,7 +207,7 @@ private fun cjkNumeral(n: Int): String = when {
 
 /**
  * Per-paragraph 段首缩排 style (CLREQ §6.2.1.1/§6.2.1.2). Resolves to the
- * engine's `(blockIndentEm, firstLineIndentEm)`; the indent AMOUNT for
+ * engine's `(blockIndent, firstLineIndent)`; the indent AMOUNT for
  * [FirstLine] stays the engine's MeasureAdaptiveFirstLineIndent decision.
  */
 sealed interface ParagraphIndent {
@@ -215,18 +217,18 @@ sealed interface ParagraphIndent {
     /** 不缩进。 */
     data object Flush : ParagraphIndent
 
-    /** 凸排：首行齐头、次行起缩 [em] 字（对话/列表/法条）。 */
-    data class Hanging(val em: Float = 2f) : ParagraphIndent
+    /** 凸排：首行齐头、次行起缩 [indent]（对话/列表/法条）。 */
+    data class Hanging(val indent: Ic = 2.ic) : ParagraphIndent
 
-    /** 段落缩排：整段缩 [em] 字（引用/诗词），首行再额外缩 [firstLineEm]。 */
-    data class Block(val em: Float = 2f, val firstLineEm: Float = 0f) : ParagraphIndent
+    /** 段落缩排：整段缩 [indent]（引用/诗词），首行再额外缩 [firstLine]。 */
+    data class Block(val indent: Ic = 2.ic, val firstLine: Ic = Ic.Zero) : ParagraphIndent
 
-    /** → `(blockIndentEm, firstLineIndentEm)`; null firstLine = adaptive default. */
-    fun resolve(base: Float?): Pair<Float, Float?> = when (this) {
-        FirstLine -> 0f to base
-        Flush -> 0f to 0f
-        is Hanging -> em to -em
-        is Block -> em to firstLineEm
+    /** → `(blockIndent, firstLineIndent)`; null firstLine = adaptive default. */
+    fun resolve(base: Ic?): Pair<Ic, Ic?> = when (this) {
+        FirstLine -> Ic.Zero to base
+        Flush -> Ic.Zero to Ic.Zero
+        is Hanging -> indent to -indent
+        is Block -> indent to firstLine
     }
 }
 

@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.core.Ic
+
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
@@ -20,7 +22,7 @@ class RubyLayoutTest {
     private fun input(ruby: List<RubySpan>) = LayoutInput(
         content = TiqianTextContent("中文排版"),
         constraints = LayoutConstraints(maxWidth = 400f),
-        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+        paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
         rubySpans = ruby,
     )
 
@@ -62,7 +64,7 @@ class RubyLayoutTest {
                 LayoutInput(
                     content = TiqianTextContent("中文排版"),
                     constraints = LayoutConstraints(maxWidth = 4000f), // one line, no wrap
-                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                    paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                     rubySpans = spans,
                 ),
             ).clusters.sumOf { it.advance.toDouble() }

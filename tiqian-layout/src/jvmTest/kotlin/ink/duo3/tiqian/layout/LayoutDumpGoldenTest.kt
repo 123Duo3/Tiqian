@@ -69,7 +69,7 @@ class LayoutDumpGoldenTest {
                             constraints = fixture.constraints,
                             paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
                                 lineHeight = fixture.lineHeight,
-                                firstLineIndentEm = fixture.firstLineIndentEm,
+                                firstLineIndent = fixture.firstLineIndentEm?.let { ink.duo3.tiqian.core.Ic(it) },
                             ),
                             decorations = fixture.decorations,
                         ),

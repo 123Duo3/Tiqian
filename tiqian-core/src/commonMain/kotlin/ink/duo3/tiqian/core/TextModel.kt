@@ -115,7 +115,7 @@ data class ParagraphStyle(
      */
     val printingSides: PrintingSides = PrintingSides.SingleSided,
     /**
-     * 段首缩进的**显式覆盖**, in ems of the paragraph font size. `0` disables
+     * 段首缩进的**显式覆盖**，单位 `ic`（字身框，ADR 0034）。`0.ic` disables
      * the indent; any non-null value pins it regardless of measure. `null`
      * (default) means「不指定」→ 由 [firstLineIndentPolicy] 按行长自适应决定
      * （CLREQ「段首缩排以两个汉字的空间为标准」，窄行缩一字）。The indent
@@ -125,16 +125,16 @@ data class ParagraphStyle(
      * already trims the opening punctuation's leading blank at every line
      * start, which IS CLREQ's「缩减该符号始侧二分之一个汉字大小的空白」.
      */
-    val firstLineIndentEm: Float? = null,
+    val firstLineIndent: Ic? = null,
     /**
-     * 整段缩进（CLREQ §6.2.1.2 段落缩排），in ems：**所有行**的始端都内移这么多
-     * （引用、诗词、标题块）。[firstLineIndentEm] 叠加在它之上、且**相对于它**，
-     * 可为负——`blockIndentEm = H, firstLineIndentEm = -H` 即「凸排」（首行齐头、
-     * 次行起缩 H）。每行有效缩进 = `(blockIndentEm + 该行 firstLine 部分)`，钳到 ≥0。
+     * 整段缩进（CLREQ §6.2.1.2 段落缩排），单位 `ic`：**所有行**的始端都内移这么多
+     * （引用、诗词、标题块）。[firstLineIndent] 叠加在它之上、且**相对于它**，
+     * 可为负——`blockIndent = H.ic, firstLineIndent = (-H).ic` 即「凸排」（首行齐头、
+     * 次行起缩 H）。每行有效缩进 = `(blockIndent + 该行 firstLine 部分)`，钳到 ≥0。
      */
-    val blockIndentEm: Float = 0f,
+    val blockIndent: Ic = Ic.Zero,
     /**
-     * 段首缩进随行长自适应的默认策略（仅当 [firstLineIndentEm] 为 null 时
+     * 段首缩进随行长自适应的默认策略（仅当 [firstLineIndent] 为 null 时
      * 生效）. See [MeasureAdaptiveFirstLineIndent].
      */
     val firstLineIndentPolicy: MeasureAdaptiveFirstLineIndent = MeasureAdaptiveFirstLineIndent(),
@@ -154,7 +154,7 @@ data class ParagraphStyle(
  * 两者回答不同问题（悬挂：整字下移是否过松；缩进：2 字是否过重），可分别
  * 调，且本策略在 `KinsokuMode.Fixed` 下仍生效（不依赖悬挂信号）。
  *
- * 与行长无关地固定缩进，用 [ParagraphStyle.firstLineIndentEm]（显式值，含
+ * 与行长无关地固定缩进，用 [ParagraphStyle.firstLineIndent]（显式值，含
  * 0 关闭）覆盖。
  */
 data class MeasureAdaptiveFirstLineIndent(
