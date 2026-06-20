@@ -221,6 +221,14 @@ class LayoutDumpGoldenTest {
                     "centerX=${r.centerX.fmt()} baselineY=${r.baselineY.fmt()} size=${r.fontSize.fmt()} overhang=${r.overhang.fmt()}",
             )
         }
+        debug.zhuyinDecisions.forEach { z ->
+            appendLine("zhuyin ${z.baseRange.start}-${z.baseRange.end} line=${z.lineIndex}")
+            z.placements.forEach { p ->
+                appendLine(
+                    "  ${p.role} '${p.text}' rect=${p.left.fmt()},${p.top.fmt()},${p.width.fmt()},${p.height.fmt()}",
+                )
+            }
+        }
     }
 
     private fun diffMessage(id: String, expected: String, actual: String): String {

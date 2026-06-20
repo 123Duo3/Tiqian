@@ -1,8 +1,15 @@
 # ADR 0033: 注音 ruby（行间注 第二刀，右侧竖排 ㄅㄆㄇ + 调号）
 
-- Status: Accepted
+- Status: Accepted（几何 + 绘制已落地 2026-06-20，render-verify 调整中）
 - Date: 2026-06-20
 - Builds on [ADR 0032](0032-ruby-annotations.md)（拼音 ruby，上方）
+
+## 实现状态
+
+输入侧（`RubyKind.Zhuyin`、`ZhuyinParser`、`cjkZhuyin`）+ 几何（`computeZhuyinDecisions`：30 份
+表映到字面框；纵横对齐每字 0.5em 预留）+ 绘制（符号填字面框；调号 CJK 字体 + 墨迹探测 → 缩到
+ink 宽 = 调号格 + 垂直居中）全部落地。`ZhuyinDecisionInfo` 入 dump。`ZhuyinLayoutTest` /
+`ZhuyinParserTest` 守。逐情况几何按 CLREQ 配图 render-verify 微调中。
 
 ## Context
 

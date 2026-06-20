@@ -17,8 +17,13 @@ import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.ClusterGeometryDecisionInfo
 import ink.duo3.tiqian.core.DecorationDecisionInfo
 import ink.duo3.tiqian.core.RubyDecisionInfo
+import ink.duo3.tiqian.clreq.ZhuyinParser
+import ink.duo3.tiqian.clreq.ZhuyinTone
 import ink.duo3.tiqian.core.RubyKind
 import ink.duo3.tiqian.core.RubySpan
+import ink.duo3.tiqian.core.ZhuyinDecisionInfo
+import ink.duo3.tiqian.core.ZhuyinGlyphPlacement
+import ink.duo3.tiqian.core.ZhuyinGlyphRole
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSegmentInfo
 import ink.duo3.tiqian.core.DecorationSpan
@@ -464,11 +469,21 @@ class ExplainableStubParagraphLayoutEngine(
         // STRUCTURAL spread baked into baseGeometry so the breaker + final geometry
         // both see the widened advances.
         val rubySpread = computeRubySpread(naturalClusters, rubyFontSize)
+        // 注音 纵横对齐 (ADR 0033): 注音 present ⇒ EVERY char reserves 0.5em to its
+        // right for the注音 column — uniform, even unannotated punctuation/Latin.
+        val hasZhuyin = input.rubySpans.any { it.kind == RubyKind.Zhuyin }
+        val rubyAndZhuyinSpread = if (!hasZhuyin) {
+            rubySpread
+        } else {
+            HashMap(rubySpread).apply {
+                naturalClusters.indices.forEach { merge(it, 0.5f * fontSize) { a, b -> a + b } }
+            }
+        }
         val baseGeometry = PunctuationGeometryLedger.from(
             naturalClusters = naturalClusters,
             punctuationAtoms = punctuationAtoms,
             spacingPlan = spacingPlan,
-        ).withRubySpread(rubySpread)
+        ).withRubySpread(rubyAndZhuyinSpread)
         val clusters = baseGeometry.resolveClusters()
         // CLREQ 挤压处理优先顺序 (ADR 0020): tiered shrink resources for
         // PushIn. Punctuation classes map to tiers; style knobs gate the
@@ -588,6 +603,7 @@ class ExplainableStubParagraphLayoutEngine(
         // line height = 注文 ascent+descent+gap; the注文 baseline drops below the base
         // baseline by 基字 ascent + 注文 descent + gap.
         val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
+        val baseDescent = metricDecisions.maxOfOrNull { it.layoutMetrics.descent } ?: (fontSize * 0.12f)
         val rubyLayoutMetrics = if (pinyinSpans.isEmpty()) {
             null
         } else {
@@ -1060,6 +1076,16 @@ class ExplainableStubParagraphLayoutEngine(
             rubyBaselineDrop = rubyBaselineDrop,
             rubyFontSize = rubyFontSize,
         )
+        val zhuyinDecisions = computeZhuyinDecisions(
+            rubySpans = input.rubySpans.filter { it.kind == RubyKind.Zhuyin },
+            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineBoxes = lines,
+            finalClusters = finalClusters,
+            naturalClusters = naturalClusters,
+            baseAscent = baseAscent,
+            baseDescent = baseDescent,
+            fontSize = fontSize,
+        )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
@@ -1188,6 +1214,7 @@ class ExplainableStubParagraphLayoutEngine(
                 decorationDecisions = decorationDecisions,
                 decorationSegments = decorationSegments,
                 rubyDecisions = rubyDecisions,
+                zhuyinDecisions = zhuyinDecisions,
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
@@ -1829,6 +1856,120 @@ class ExplainableStubParagraphLayoutEngine(
             }
         }
         return out
+    }
+
+    /**
+     * 注音 geometry (ADR 0033): for each Zhuyin span, lay the ㄅㄆㄇ symbols (9×9 份)
+     * and the 调号 (5×5 份 / 轻声) in the base's right-side 15-份 zone, mapping the
+     * 30-份 grid onto the base 字面框 (typo box). `ZhuyinParser` derives the tone.
+     */
+    private fun computeZhuyinDecisions(
+        rubySpans: List<RubySpan>,
+        lineRanges: List<IntRange>,
+        lineBoxes: List<LineBox>,
+        finalClusters: List<Cluster>,
+        naturalClusters: List<Cluster>,
+        baseAscent: Float,
+        baseDescent: Float,
+        fontSize: Float,
+    ): List<ZhuyinDecisionInfo> {
+        if (rubySpans.isEmpty()) return emptyList()
+        val hUnit = fontSize / 30f
+        val vUnit = (baseAscent + baseDescent) / 30f
+        val out = mutableListOf<ZhuyinDecisionInfo>()
+        for (ruby in rubySpans) {
+            lineRanges.forEachIndexed { lineIndex, clusterRange ->
+                var x = lineBoxes[lineIndex].indent
+                var contentLeft = Float.NaN
+                var contentWidth = 0f
+                for (idx in clusterRange) {
+                    val cluster = finalClusters[idx]
+                    if (cluster.range.start >= ruby.baseRange.start && cluster.range.end <= ruby.baseRange.end) {
+                        if (contentLeft.isNaN()) contentLeft = x
+                        contentWidth += naturalClusters[idx].advance
+                    }
+                    x += cluster.advance
+                }
+                if (contentLeft.isNaN()) return@forEachIndexed
+                val zoneLeft = contentLeft + contentWidth // 注音 zone = right of base content
+                val boxTop = lineBoxes[lineIndex].baseline - baseAscent
+                val parsed = ZhuyinParser.parse(ruby.text)
+                val n = parsed.symbols.size.coerceIn(1, 3)
+                val neutral = parsed.tone == ZhuyinTone.Neutral
+                fun box(leftU: Float, widthU: Float, topU: Int, botU: Int, role: ZhuyinGlyphRole, text: String) =
+                    ZhuyinGlyphPlacement(
+                        text = text,
+                        left = zoneLeft + leftU * hUnit,
+                        top = boxTop + topU * vUnit,
+                        width = widthU * hUnit,
+                        height = (botU - topU) * vUnit,
+                        role = role,
+                    )
+                val placements = buildList {
+                    // ㄅㄆㄇ symbols: 9-份 column at [1,10]份.
+                    val rows = zhuyinSymbolRows(n, neutral)
+                    parsed.symbols.take(3).forEachIndexed { i, sym ->
+                        val (topU, botU) = rows[i]
+                        add(box(1f, 9f, topU, botU, ZhuyinGlyphRole.Symbol, sym))
+                    }
+                    when (parsed.tone) {
+                        // 轻声: small dot in the symbol column top.
+                        ZhuyinTone.Neutral -> {
+                            val (topU, botU) = zhuyinNeutralRow(n)
+                            add(box(4f, 3f, topU, botU, ZhuyinGlyphRole.Tone, "˙"))
+                        }
+                        // 平上去: 5×5 in the 调号 column [10,15]份, upper-right.
+                        ZhuyinTone.Yangping, ZhuyinTone.Shang, ZhuyinTone.Qu -> {
+                            val (topU, botU) = zhuyinRegularToneRow(n)
+                            add(box(10f, 5f, topU, botU, ZhuyinGlyphRole.Tone, zhuyinToneGlyph(parsed.tone)))
+                        }
+                        // 入声: 5×5 lower-right (parser does not emit it in v1).
+                        ZhuyinTone.Ru -> {
+                            val (topU, botU) = zhuyinRuToneRow(n)
+                            add(box(10f, 5f, topU, botU, ZhuyinGlyphRole.Tone, zhuyinToneGlyph(parsed.tone)))
+                        }
+                        ZhuyinTone.Yinping -> Unit // no mark
+                    }
+                }
+                if (placements.isNotEmpty()) {
+                    out += ZhuyinDecisionInfo(ruby.baseRange, lineIndex, placements, ruby.fontFamilies)
+                }
+            }
+        }
+        return out
+    }
+
+    /** ㄅㄆㄇ vertical rows [顶,底]份 by symbol count (ADR 0033 表), with/without 轻声. */
+    private fun zhuyinSymbolRows(n: Int, neutral: Boolean): List<Pair<Int, Int>> = when {
+        n <= 1 -> listOf(11 to 20)
+        n == 2 -> listOf(6 to 15, 17 to 26)
+        else -> if (neutral) listOf(3 to 12, 12 to 21, 21 to 30) else listOf(2 to 11, 11 to 20, 20 to 29)
+    }
+
+    private fun zhuyinNeutralRow(n: Int): Pair<Int, Int> = when (n) {
+        1 -> 8 to 10
+        2 -> 3 to 5
+        else -> 0 to 2
+    }
+
+    private fun zhuyinRegularToneRow(n: Int): Pair<Int, Int> = when (n) {
+        1 -> 9 to 14
+        2 -> 15 to 20
+        else -> 18 to 23
+    }
+
+    private fun zhuyinRuToneRow(n: Int): Pair<Int, Int> = when (n) {
+        1 -> 16 to 21
+        2 -> 21 to 26
+        else -> 24 to 29
+    }
+
+    private fun zhuyinToneGlyph(tone: ZhuyinTone): String = when (tone) {
+        ZhuyinTone.Yangping -> "ˊ" // ˊ
+        ZhuyinTone.Shang -> "ˇ"    // ˇ
+        ZhuyinTone.Qu -> "ˋ"       // ˋ
+        ZhuyinTone.Neutral -> "˙"  // ˙
+        else -> ""
     }
 
     private fun List<ClusterMetricDecision>.lineMetrics(

@@ -105,6 +105,43 @@ internal fun DrawScope.drawParagraph(
                 skCanvas.drawTextBlob(blob, ruby.centerX - width / 2f, ruby.baselineY, paint)
             }
         }
+
+        // 注音 (ADR 0033): ㄅㄆㄇ symbols fill their 9×9 box; 调号 are ink-detected and
+        // scaled so their ink WIDTH fills the box, then vertically centred. FORCED CJK
+        // 注文 font (the optimized large tone glyphs live there, not in Western faces).
+        for (z in result.debug.zhuyinDecisions) {
+            val tf = (
+                SkiaSystemTypefaces.typeface(isLatin = false, family = z.fontFamilies.firstOrNull(), style = org.jetbrains.skia.FontStyle.NORMAL)
+                    ?: SkiaSystemTypefaces.cjk
+                ) ?: continue
+            for (p in z.placements) {
+                when (p.role) {
+                    ink.duo3.tiqian.core.ZhuyinGlyphRole.Symbol -> {
+                        val f = Font(tf, p.height) // box height = symbol 字面框 (0.3em)
+                        val adv = f.measureTextWidth(p.text)
+                        shapeTextBlob(shaper, p.text, f, result.input.textStyle.locale)?.let { blob ->
+                            // centre the (full-width) glyph in the box; baseline = top + typo ascent.
+                            skCanvas.drawTextBlob(blob, p.left + (p.width - adv) / 2f, p.top + p.height * 0.88f, paint)
+                        }
+                    }
+                    ink.duo3.tiqian.core.ZhuyinGlyphRole.Tone -> {
+                        val glyphs = tf.getStringGlyphs(p.text)
+                        if (glyphs.isEmpty()) continue
+                        val ref = Font(tf, p.height) // a reference size; rescale to ink width
+                        val refBounds = ref.getBounds(glyphs).first()
+                        if (refBounds.width <= 0f) continue
+                        val scaled = Font(tf, p.height * (p.width / refBounds.width))
+                        val b = scaled.getBounds(glyphs).first()
+                        shapeTextBlob(shaper, p.text, scaled, result.input.textStyle.locale)?.let { blob ->
+                            // ink left → box left; ink vertical centre → box vertical centre.
+                            val drawX = p.left - b.left
+                            val baselineY = p.top + p.height / 2f - (b.top + b.bottom) / 2f
+                            skCanvas.drawTextBlob(blob, drawX, baselineY, paint)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

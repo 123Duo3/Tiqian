@@ -91,6 +91,7 @@ data class LayoutDebugInfo(
     val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
     val rubyDecisions: List<RubyDecisionInfo> = emptyList(),
+    val zhuyinDecisions: List<ZhuyinDecisionInfo> = emptyList(),
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
@@ -176,6 +177,37 @@ data class RubyDecisionInfo(
     /** 注文专用字体（family 名优先列表）；空 = 渲染器默认。 */
     val fontFamilies: List<String> = emptyList(),
 )
+
+/**
+ * 注音 geometry (ADR 0033): the ㄅㄆㄇ symbols + 调号 placed in the right-side zone
+ * of [baseRange] on line [lineIndex]. Each [placement] is one glyph + its box
+ * (absolute px) + role; the renderer draws [ZhuyinGlyphRole.Symbol] filling the
+ * box and [ZhuyinGlyphRole.Tone] ink-detected (scale to box width, vertical-centre).
+ */
+data class ZhuyinDecisionInfo(
+    val baseRange: TextRange,
+    val lineIndex: Int,
+    val placements: List<ZhuyinGlyphPlacement>,
+    /** 注文 font (must carry ㄅㄆㄇ glyphs); empty = renderer's CJK default. */
+    val fontFamilies: List<String> = emptyList(),
+)
+
+data class ZhuyinGlyphPlacement(
+    val text: String,
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val height: Float,
+    val role: ZhuyinGlyphRole,
+)
+
+enum class ZhuyinGlyphRole {
+    /** ㄅㄆㄇ — fill the 9×9 box at the box font size (字面框). */
+    Symbol,
+
+    /** 调号 (平上去/入声/轻声) — ink-detect, scale ink width to the box, vertical-centre. */
+    Tone,
+}
 
 /**
  * Per-line rectangle segment of a box-style decoration (示亡号, ADR 0018).
