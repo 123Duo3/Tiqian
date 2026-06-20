@@ -117,11 +117,10 @@ class ExplainableStubParagraphLayoutEngine(
         val emphasisRanges = input.decorations.filter { it.kind == DecorationKind.Emphasis }.map { it.range }
         fun emphasisItalicAt(offset: Int): Boolean =
             emphasisRanges.any { offset >= it.start && offset < it.end }
-        // 行间注 (ruby, ADR 0032): 注文 above the base reserves a uniform band in
-        // the line height (CLREQ「行距不随标注与否变」); advance is untouched (注文
-        // wider than 基字 overhangs — v1, 避让 is a follow-up).
+        // 行间注 (ruby, ADR 0032): 注文 above the base; the band reserved in the line
+        // height is the注文 font's REAL ascent+descent stacked over the base 字面顶
+        // (computed after metricDecisions below). advance handled by 避让.
         val rubyFontSize = fontSize * RUBY_FONT_EM
-        val rubyBand = if (input.rubySpans.isEmpty()) 0f else fontSize * RUBY_BAND_EM
         // Span edges force cluster splits so no cluster straddles a style change
         // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
         val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
@@ -579,6 +578,32 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+        // 行间注 vertical placement (ADR 0032): stack the 注文 font's REAL 字面框
+        // (ascent/descent at the ruby size, ADR 0002 amendment — no synthesized em)
+        // on top of the base 字面顶, with a small clearance. The band reserved in the
+        // line height = 注文 ascent+descent+gap; the注文 baseline drops below the base
+        // baseline by 基字 ascent + 注文 descent + gap.
+        val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
+        val rubyLayoutMetrics = if (input.rubySpans.isEmpty()) {
+            null
+        } else {
+            val rubyDecision = fallbackResolver.resolve(
+                text = "x",
+                range = TextRange(0, 1),
+                request = FontRequest(preferredFamilies = emptyList(), locale = input.textStyle.locale, role = FontRole.LatinText),
+            )
+            val req = FontMetricsRequest(
+                fontKey = rubyDecision.candidate.key,
+                fontSize = rubyFontSize,
+                role = FontRole.LatinText,
+                locale = input.textStyle.locale,
+            )
+            fontMetricsNormalizer.normalize(FontMetricsNormalizationInput(request = req, rawMetrics = fontMetricsResolver.resolve(req)))
+        }
+        val rubyStackGap = fontSize * RUBY_STACK_GAP_EM
+        val rubyBand = if (rubyLayoutMetrics == null) 0f else rubyLayoutMetrics.ascent + rubyLayoutMetrics.descent + rubyStackGap
+        val rubyBaselineDrop = baseAscent + (rubyLayoutMetrics?.descent ?: 0f) + rubyStackGap
+
         // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 行间标点
         // (着重号、示亡号 etc.) present, line spacing (height − 字面高)
         // must not drop below 1/2 字号 (单面装) / 5/8 字号 (双面装).
@@ -1028,7 +1053,7 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             naturalClusters = naturalClusters,
-            fontSize = fontSize,
+            rubyBaselineDrop = rubyBaselineDrop,
             rubyFontSize = rubyFontSize,
         )
 
@@ -1764,7 +1789,7 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         naturalClusters: List<Cluster>,
-        fontSize: Float,
+        rubyBaselineDrop: Float,
         rubyFontSize: Float,
     ): List<RubyDecisionInfo> {
         if (rubySpans.isEmpty()) return emptyList()
@@ -1791,7 +1816,7 @@ class ExplainableStubParagraphLayoutEngine(
                         text = ruby.text,
                         lineIndex = lineIndex,
                         centerX = baseLeft + contentWidth / 2f,
-                        baselineY = lineBoxes[lineIndex].baseline - fontSize * RUBY_BASELINE_DROP_EM,
+                        baselineY = lineBoxes[lineIndex].baseline - rubyBaselineDrop,
                         fontSize = rubyFontSize,
                         overhang = ((estRubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
                         fontFamilies = ruby.fontFamilies,
@@ -2173,17 +2198,11 @@ private const val RUBY_FONT_EM = 0.5f
  */
 private const val RUBY_MIN_GAP_EM_OF_RUBY = 0.25f
 /**
- * Ruby baseline above the base baseline. Must clear the base 字面顶 (≈0.88em) by
- * the注文's own DESCENDER (拉丁降部 ≈0.1em at half-em) plus a gap — otherwise
- * `g/j/p/y` descenders crowd the base char. 1.12em leaves ≈0.13em daylight.
+ * Clearance between the注文 字面框底 and the base 字面框顶 when stacking them
+ * (the only placement constant — ascent/descent come from the REAL font metrics,
+ * ADR 0002 amendment「用字体声明度量」, not synthesized em guesses).
  */
-private const val RUBY_BASELINE_DROP_EM = 1.12f
-/**
- * Ascent reserved above the base 字面 for the ruby band: from the base 字面顶
- * (0.88em) up to the注文 ascender + 声调号 top (注文基线 1.12em + 注文 cap/调号
- * ≈0.5em ⇒ ~1.62em above base baseline ⇒ ~0.74em over the 字面顶).
- */
-private const val RUBY_BAND_EM = 0.74f
+private const val RUBY_STACK_GAP_EM = 0.08f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
