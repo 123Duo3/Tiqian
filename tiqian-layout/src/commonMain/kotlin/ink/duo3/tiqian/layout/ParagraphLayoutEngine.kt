@@ -64,6 +64,7 @@ import ink.duo3.tiqian.font.FontMetricsResolver
 import ink.duo3.tiqian.font.FontDecision
 import ink.duo3.tiqian.font.FontRequest
 import ink.duo3.tiqian.font.FontRole
+import ink.duo3.tiqian.font.MetricBox
 import ink.duo3.tiqian.font.FontRoleClassifier
 import ink.duo3.tiqian.font.FontRoleContext
 import ink.duo3.tiqian.font.LayoutFontMetrics
@@ -2067,10 +2068,16 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+        // The CJK line box follows the 字身框 (IdeographicEmBox). Latin/other runs use
+        // the taller RawFontBox (full hhea incl. line gap); they sit WITHIN the CJK box +
+        // its leading and must NOT inflate the line — otherwise one inline Latin word (or
+        // ㄅㄆㄇ in a different metric) stretches EVERY line in the paragraph. Pure-Latin
+        // paragraphs (no 字身框 cluster) fall back to all clusters so they still fit.
+        val heightSource = filter { it.layoutMetrics.metricBox == MetricBox.IdeographicEmBox }.ifEmpty { this }
         // 行间注 (ADR 0032): the注文 band sits ABOVE the base 字面, so it adds to
         // the ascent — the baseline drops to leave room above and the line grows.
-        val ascent = maxOf { it.layoutMetrics.ascent } + rubyBand
-        val descent = maxOf { it.layoutMetrics.descent }
+        val ascent = heightSource.maxOf { it.layoutMetrics.ascent } + rubyBand
+        val descent = heightSource.maxOf { it.layoutMetrics.descent }
         val naturalHeight = ascent + descent
         // Height = the explicit value, else the CjkBodyLineHeightDefault, but
         // never below naturalHeight + InterlinearMarkLineSpacingFloor — that
