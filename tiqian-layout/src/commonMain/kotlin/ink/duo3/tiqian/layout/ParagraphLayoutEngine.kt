@@ -468,14 +468,19 @@ class ExplainableStubParagraphLayoutEngine(
         // STRUCTURAL spread baked into baseGeometry so the breaker + final geometry
         // both see the widened advances.
         val rubySpread = computeRubySpread(naturalClusters, rubyFontSize)
-        // 注音 纵横对齐 (ADR 0033): 注音 present ⇒ EVERY char reserves 0.5em to its
-        // right for the注音 column — uniform, even unannotated punctuation/Latin.
-        val hasZhuyin = input.rubySpans.any { it.kind == RubyKind.Zhuyin }
-        val rubyAndZhuyinSpread = if (!hasZhuyin) {
+        // 注音 (ADR 0033): reserve the 0.5em 注音 column ONLY on each annotated base
+        // char's right side (its last cluster). The uniform every-char reservation is
+        // 繁体中文 纵横对齐 — not built yet — so it stays OUT: the 注音 sits in its own
+        // base's trailing space and adjacent unannotated text keeps normal spacing.
+        val zhuyinSpans = input.rubySpans.filter { it.kind == RubyKind.Zhuyin }
+        val rubyAndZhuyinSpread = if (zhuyinSpans.isEmpty()) {
             rubySpread
         } else {
             HashMap(rubySpread).apply {
-                naturalClusters.indices.forEach { merge(it, 0.5f * fontSize) { a, b -> a + b } }
+                zhuyinSpans.forEach { z ->
+                    val r = naturalClusters.clusterIndexRangeFor(z.baseRange) ?: return@forEach
+                    merge(r.last, 0.5f * fontSize) { a, b -> a + b }
+                }
             }
         }
         val baseGeometry = PunctuationGeometryLedger.from(
@@ -630,16 +635,18 @@ class ExplainableStubParagraphLayoutEngine(
         // print backend, like 竖排.)
         val interlinearSpacingFloor = if (input.decorations.isEmpty()) 0f else 0.5f * fontSize
         val defaultBodyLineHeight = fontSize * DEFAULT_BODY_LINE_HEIGHT_EM
-        val lineMetrics = metricDecisions.lineMetrics(
+        // Base line metrics WITHOUT the ruby band — the band is added PER LINE below
+        // (only lines that carry 拼音 ruby get it, unless `rubyUniformBand`), so a
+        // single ruby no longer inflates the whole paragraph's line height (ADR 0032).
+        val baseLineMetrics = metricDecisions.lineMetrics(
             explicitLineHeight = input.paragraphStyle.lineHeight,
             defaultLineHeight = defaultBodyLineHeight,
             spacingFloor = interlinearSpacingFloor,
-            rubyBand = rubyBand,
         )
-        val lineSpacingDecision = if (lineMetrics.height <= 0f) {
+        val lineSpacingDecision = if (baseLineMetrics.height <= 0f) {
             null
         } else {
-            val natural = lineMetrics.height - lineMetrics.extraLeading
+            val natural = baseLineMetrics.height - baseLineMetrics.extraLeading
             val requested = input.paragraphStyle.lineHeight
             // Did the mark floor raise the line above what the explicit/default
             // height alone would give? (The 0.5em floor is subsumed by the 1.5em
@@ -649,7 +656,7 @@ class ExplainableStubParagraphLayoutEngine(
             LineSpacingDecisionInfo(
                 naturalHeight = natural,
                 requestedLineHeight = requested,
-                resolvedHeight = lineMetrics.height,
+                resolvedHeight = baseLineMetrics.height,
                 spacingFloor = interlinearSpacingFloor,
                 floorApplied = markFloorBinds,
                 reason = when {
@@ -987,6 +994,18 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+        // 行间注 band per line (ADR 0032): only the line(s) that carry 拼音 ruby reserve
+        // the 注文 band; `rubyUniformBand` opts every line in (uniform spacing, taller
+        // whole paragraph). 注音 (side ㄅㄆㄇ) never reserves line height. Tops accumulate
+        // so a ruby line pushes the lines below it down, the rest stay put.
+        val pinyinClusterRanges = pinyinSpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) }
+        val lineExtra = lineSolution.lines.map { lc ->
+            val hasRuby = pinyinClusterRanges.any { it.first <= lc.clusterRange.last && it.last >= lc.clusterRange.first }
+            if (rubyBand > 0f && (input.paragraphStyle.rubyUniformBand || hasRuby)) rubyBand else 0f
+        }
+        val lineTop = FloatArray(lineSolution.lines.size)
+        run { var acc = 0f; for (i in lineExtra.indices) { lineTop[i] = acc; acc += baseLineMetrics.height + lineExtra[i] } }
+
         val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             // LineEndHangingPunctuation: the hung mark is excluded from the
             // measure-fill width (adjustedWidth) but kept in visualWidth —
@@ -1025,9 +1044,9 @@ class ExplainableStubParagraphLayoutEngine(
             }
             LineBox(
                 range = lineCandidate.sourceRange,
-                baseline = lineMetrics.baseline + lineIndex * lineMetrics.height,
-                top = lineIndex * lineMetrics.height,
-                bottom = (lineIndex + 1) * lineMetrics.height,
+                baseline = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.baseline,
+                top = lineTop[lineIndex],
+                bottom = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.height,
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
@@ -1082,7 +1101,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
-        val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
+        val totalHeight = lines.lastOrNull()?.bottom ?: baseLineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 
         return LayoutResult(

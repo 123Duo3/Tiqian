@@ -143,6 +143,12 @@ data class ParagraphStyle(
      * 行长字号整数倍量化（grid-first, ADR 0007 的完整形态）. See [LineLengthGrid].
      */
     val lineLengthGrid: LineLengthGrid = LineLengthGrid(),
+    /**
+     * 行间注（拼音）行高分配：默认 **false** = 只有**含注音的那一行**抬高行高给注文留带，
+     * 其余行不受影响（ADR 0032）。`true` = 整段每行都预留同一条注文带，使行距整齐划一
+     * （以全段抬高为代价）——按需开启。注音（右侧 ㄅㄆㄇ）不占行高，不受此项影响。
+     */
+    val rubyUniformBand: Boolean = false,
 )
 
 /**
