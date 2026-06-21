@@ -1068,8 +1068,9 @@ class ExplainableStubParagraphLayoutEngine(
         // shift, SkiaTextBlobs.forEachPositionedCluster). The trailing justify stretch
         // is already excluded at use; the LEADING side was being missed (CLREQ「两侧」).
         val autoSpaceGapPx = 0.25f * fontSize
+        val geometryByRange = geometryDecisions.associateBy { it.range }
         val leadingGapRanges = autoSpaceDecisions.filter { it.side == "leading" }.map { it.clusterRange }.toSet()
-        val leadingConsumedByRange = geometryDecisions.associate { it.range to it.leadingGlueConsumed }
+        val trailingGapRanges = autoSpaceDecisions.filter { it.side == "trailing" }.map { it.clusterRange }.toSet()
         val decorationDecisions = computeDecorationDecisions(
             decorations = input.decorations,
             lineRanges = lineSolution.lines.map { it.clusterRange },
@@ -1086,8 +1087,9 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             justifyDeltaByCluster = justifyDeltaByCluster,
+            geometryByRange = geometryByRange,
             leadingGapRanges = leadingGapRanges,
-            leadingConsumedByRange = leadingConsumedByRange,
+            trailingGapRanges = trailingGapRanges,
             autoSpaceGapPx = autoSpaceGapPx,
             fontSize = fontSize,
         )
@@ -1339,11 +1341,27 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         justifyDeltaByCluster: Map<Int, Float>,
+        geometryByRange: Map<TextRange, ClusterGeometryDecisionInfo>,
         leadingGapRanges: Set<TextRange>,
-        leadingConsumedByRange: Map<TextRange, Float>,
+        trailingGapRanges: Set<TextRange>,
         autoSpaceGapPx: Float,
         fontSize: Float,
     ): List<DecorationSegmentInfo> {
+        // Remaining edge blank to strip off a covered cluster so 行间线 hugs the ink/body
+        // (CLREQ 避两侧空白): the autospace gap + the punctuation glue still present
+        // (开/闭标点 half-width), mirroring how the renderer positions the glyph.
+        fun leadingBlank(range: TextRange, atLineStart: Boolean): Float {
+            val g = geometryByRange[range]
+            val glue = if (g != null) g.leadingGlueNatural - g.leadingGlueConsumed else 0f
+            val auto = if (range in leadingGapRanges && !atLineStart) autoSpaceGapPx else 0f
+            return glue + auto
+        }
+        fun trailingBlank(range: TextRange, atLineEnd: Boolean): Float {
+            val g = geometryByRange[range]
+            val glue = if (g != null) g.trailingGlueNatural - g.trailingGlueConsumed else 0f
+            val auto = if (range in trailingGapRanges && !atLineEnd) autoSpaceGapPx else 0f
+            return glue + auto
+        }
         val boxSpans = decorations.filter {
             it.kind == DecorationKind.Mourning ||
                 it.kind == DecorationKind.ProperNoun ||
@@ -1366,18 +1384,16 @@ class ExplainableStubParagraphLayoutEngine(
                         cluster.range.end <= span.range.end
                     if (covered) {
                         if (left == null) {
-                            // Start at the first covered cluster's INK left: skip the
-                            // leading autospace gap + consumed 开标点 glue (CLREQ 行间线
-                            // 避两侧空白), mirroring the renderer's glyph shift.
-                            val leadingGap = if (cluster.range in leadingGapRanges && idx != clusterRange.first) autoSpaceGapPx else 0f
-                            left = x + leadingGap - (leadingConsumedByRange[cluster.range] ?: 0f)
+                            // Start at the first covered cluster's ink/body left: skip the
+                            // leading blank (autospace + 开标点 glue), CLREQ 避两侧空白.
+                            left = x + leadingBlank(cluster.range, idx == clusterRange.first)
                             segStart = cluster.range.start
                         }
-                        // The segment follows the justified glyph positions
-                        // (行间线随拉开的字距延长、不断开), but the LAST
-                        // cluster's trailing justify delta stays outside —
-                        // 长度与文字外框一致.
-                        right = x + cluster.advance - (justifyDeltaByCluster[idx] ?: 0f)
+                        // End at the last covered cluster's ink/body right: drop the
+                        // trailing justify stretch AND the trailing blank (autospace +
+                        // 闭标点 glue) — 长度与文字外框一致, both sides.
+                        right = x + cluster.advance - (justifyDeltaByCluster[idx] ?: 0f) -
+                            trailingBlank(cluster.range, idx == clusterRange.last)
                         segEnd = cluster.range.end
                     }
                     x += cluster.advance
