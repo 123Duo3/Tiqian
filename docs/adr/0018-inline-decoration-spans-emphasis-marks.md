@@ -77,9 +77,12 @@ Layout 在行/cluster 几何定稿后解析 span，产出
   此前引擎没有任何约束——默认行高恰为 1.0em（字面相贴、行距 0），
   fixture 靠手动 lineHeight 兜底，demo 第三段实际处于违例状态。现在：
   段落带行间标记类 decoration 时 auto 行高抬到 floor；显式 lineHeight
-  低于 floor 时 clamp（原文是「不应小于」）。单/双面装是**印刷正反面**
-  属性，落为 `ParagraphStyle.printingSides`（屏幕渲染无背面，默认单面）。
-  决策记入 `LayoutDebugInfo.lineSpacingDecision`，dump 增 `linespacing` 行。
+  低于 floor 时 clamp（原文是「不应小于」）。决策记入
+  `LayoutDebugInfo.lineSpacingDecision`，dump 增 `linespacing` 行。
+  - **Amendment (2026-06-21)**：floor 固定取**单面装 1/2 字号**（屏幕真实下限）。
+    原 `ParagraphStyle.printingSides` + 双面装 5/8 已删——单/双面是**印刷正反面透印**
+    概念，屏幕前端无背面、无法兑现（同竖排/JLREQ「不过早承诺」）。双面 5/8 随打印
+    后端连同 ADR 再回。
 - **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字身底仅 0.12em，
   视觉上贴字。下移后点与字面有明确空隙，且在 floor 保证的行距带内
   （点底 +0.56em < 下一行字身顶 +0.62em @1.5em 行高）。
