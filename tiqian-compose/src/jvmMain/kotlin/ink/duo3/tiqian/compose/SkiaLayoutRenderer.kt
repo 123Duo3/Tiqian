@@ -98,7 +98,8 @@ internal fun DrawScope.drawParagraph(
         for (ruby in result.debug.rubyDecisions) {
             // 注文 uses its OWN font (注音 needs ㄅㄆㄇ glyphs; 拼音/释义 may differ) —
             // resolved via the shared resolver, defaulting to the Latin face.
-            val tf = SkiaSystemTypefaces.typeface(isLatin = true, family = ruby.fontFamilies.firstOrNull(), style = org.jetbrains.skia.FontStyle.NORMAL)
+            val rubyStyle = org.jetbrains.skia.FontStyle(ruby.fontWeight, org.jetbrains.skia.FontStyle.NORMAL.width, org.jetbrains.skia.FontSlant.UPRIGHT)
+            val tf = SkiaSystemTypefaces.typeface(isLatin = true, family = ruby.fontFamilies.firstOrNull(), style = rubyStyle)
                 ?: SkiaSystemTypefaces.latin
             val rubyFont = Font(tf, ruby.fontSize)
             val width = rubyFont.measureTextWidth(ruby.text)
@@ -112,7 +113,11 @@ internal fun DrawScope.drawParagraph(
         // 注文 font (the optimized large tone glyphs live there, not in Western faces).
         for (z in result.debug.zhuyinDecisions) {
             val tf = (
-                SkiaSystemTypefaces.typeface(isLatin = false, family = z.fontFamilies.firstOrNull(), style = org.jetbrains.skia.FontStyle.NORMAL)
+                SkiaSystemTypefaces.typeface(
+                    isLatin = false,
+                    family = z.fontFamilies.firstOrNull(),
+                    style = org.jetbrains.skia.FontStyle(z.fontWeight, org.jetbrains.skia.FontStyle.NORMAL.width, org.jetbrains.skia.FontSlant.UPRIGHT),
+                )
                     ?: SkiaSystemTypefaces.cjk
                 ) ?: continue
             for (p in z.placements) {
