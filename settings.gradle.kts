@@ -30,6 +30,7 @@ include(
     ":tiqian-clreq",
     ":tiqian-layout",
     ":tiqian-compose",
+    ":tiqian-gallery-android",
     ":tiqian-android-view",
     ":tiqian-playground",
     ":tiqian-test",
