@@ -1,0 +1,321 @@
+package org.tiqian.compose
+
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.text.TextPaint
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import org.tiqian.core.Cluster
+import org.tiqian.core.ColorSpan
+import org.tiqian.core.DecorationKind
+import org.tiqian.core.LayoutResult
+import org.tiqian.core.LineBox
+import org.tiqian.core.TextSpan
+import org.tiqian.core.TextStyle
+import org.tiqian.core.BopomofoGlyphRole
+import org.tiqian.font.FontRole
+import org.tiqian.shaping.android.AndroidTypefaceResolver
+import org.tiqian.shaping.android.SystemAndroidTypefaceResolver
+import java.util.Locale
+import kotlin.math.max
+
+private val AndroidRendererTypefaces = SystemAndroidTypefaceResolver()
+
+internal actual fun ContentDrawScope.drawParagraph(
+    result: LayoutResult,
+    color: Int,
+    colorSpans: List<ColorSpan>,
+    spans: List<TextSpan>,
+) {
+    drawIntoCanvas { canvas ->
+        val native = canvas.nativeCanvas
+        drawAndroidGlyphs(native, result, color, colorSpans, spans, AndroidRendererTypefaces)
+        drawAndroidDecorations(native, result, color, spans, AndroidRendererTypefaces)
+        drawAndroidRuby(native, result, color, AndroidRendererTypefaces)
+        drawAndroidBopomofo(native, result, color, AndroidRendererTypefaces)
+    }
+}
+
+private fun drawAndroidGlyphs(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    color: Int,
+    colorSpans: List<ColorSpan>,
+    spans: List<TextSpan>,
+    typefaces: AndroidTypefaceResolver,
+) {
+    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
+    }
+    result.forEachAndroidPositionedCluster(spans) { _, cluster, drawX, baselineY, run ->
+        paint.color = colorSpans.lastOrNull { cluster.range.start >= it.start && cluster.range.start < it.end }?.argb ?: color
+        paint.textSize = run.style.fontSize
+        paint.typeface = typefaces.resolve(run.role, run.style.fontFamilies, run.style.fontWeight, run.style.italic)
+        paint.fontFeatureSettings = null
+        drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint)
+    }
+
+    val hyphenPaint = TextPaint(paint).apply {
+        this.color = color
+        textSize = result.input.textStyle.fontSize
+        typeface = typefaces.resolve(FontRole.LatinText)
+    }
+    for (line in result.lines) {
+        if (line.hyphenAdvance > 0f) {
+            drawContextShapedText(canvas, "-", line.indent + line.visualWidth, line.baseline, FontRole.LatinText, hyphenPaint)
+        }
+    }
+}
+
+private fun drawAndroidDecorations(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    color: Int,
+    spans: List<TextSpan>,
+    typefaces: AndroidTypefaceResolver,
+) {
+    val fontSize = result.input.textStyle.fontSize
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.FILL
+    }
+    for (dot in result.debug.decorationDecisions) {
+        if (dot.applied && dot.dotDiameter > 0f) {
+            canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, fillPaint)
+        }
+    }
+
+    if (result.debug.decorationSegments.isEmpty()) return
+    val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.STROKE
+        strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
+    }
+    val skipPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+    for (seg in result.debug.decorationSegments) {
+        when (seg.kind) {
+            DecorationKind.ProperNoun.name -> {
+                val skips = result.androidLineInkSkipIntervals(
+                    result.lines[seg.lineIndex], seg.top - skipPad, seg.top + skipPad, spans, typefaces,
+                )
+                keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                    canvas.drawLine(x0, seg.top, x1, seg.top, strokePaint)
+                }
+            }
+            DecorationKind.BookTitle.name -> {
+                val skips = result.androidLineInkSkipIntervals(
+                    result.lines[seg.lineIndex], seg.top - skipPad, seg.top + skipPad, spans, typefaces,
+                )
+                keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                    canvas.drawPath(wavyLinePath(x0, x1, seg.top, fontSize), strokePaint)
+                }
+            }
+            else -> {
+                canvas.drawLine(seg.left, seg.top, seg.right, seg.top, strokePaint)
+                canvas.drawLine(seg.left, seg.bottom, seg.right, seg.bottom, strokePaint)
+                if (!seg.openStart) canvas.drawLine(seg.left, seg.top, seg.left, seg.bottom, strokePaint)
+                if (!seg.openEnd) canvas.drawLine(seg.right, seg.top, seg.right, seg.bottom, strokePaint)
+            }
+        }
+    }
+}
+
+private fun drawAndroidRuby(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    color: Int,
+    typefaces: AndroidTypefaceResolver,
+) {
+    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
+    }
+    for (ruby in result.debug.rubyDecisions) {
+        paint.textSize = ruby.fontSize
+        paint.typeface = typefaces.resolve(FontRole.LatinText, ruby.fontFamilies, ruby.fontWeight, italic = false)
+        paint.fontFeatureSettings = null
+        val width = paint.measureText(ruby.text)
+        drawContextShapedText(canvas, ruby.text, ruby.centerX - width / 2f, ruby.baselineY, FontRole.LatinText, paint)
+    }
+}
+
+private fun drawAndroidBopomofo(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    color: Int,
+    typefaces: AndroidTypefaceResolver,
+) {
+    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
+        fontFeatureSettings = "'vert' on"
+    }
+    val bounds = Rect()
+    for (z in result.debug.bopomofoDecisions) {
+        paint.typeface = typefaces.resolve(FontRole.CjkText, z.fontFamilies, z.fontWeight, italic = false)
+        for (p in z.placements) {
+            when (p.role) {
+                BopomofoGlyphRole.Symbol -> {
+                    paint.textSize = p.height
+                    paint.getTextBounds(p.text, 0, p.text.length, bounds)
+                    val drawX = p.left + (p.width - paint.measureText(p.text)) / 2f
+                    canvas.drawTextRun(p.text, 0, p.text.length, 0, p.text.length, drawX, p.top + p.height * 0.88f, false, paint)
+                }
+                BopomofoGlyphRole.Neutral -> {
+                    paint.textSize = p.width
+                    paint.getTextBounds(p.text, 0, p.text.length, bounds)
+                    val drawX = p.left + (p.width - paint.measureText(p.text)) / 2f
+                    val baselineY = p.top + p.height / 2f - (bounds.top + bounds.bottom) / 2f
+                    canvas.drawTextRun(p.text, 0, p.text.length, 0, p.text.length, drawX, baselineY, false, paint)
+                }
+                BopomofoGlyphRole.Tone -> {
+                    paint.textSize = p.height
+                    paint.getTextBounds(p.text, 0, p.text.length, bounds)
+                    val scale = if (bounds.width() > 0) p.width / bounds.width() else 1f
+                    paint.textSize = p.height * scale
+                    paint.getTextBounds(p.text, 0, p.text.length, bounds)
+                    val baselineY = p.top + p.height / 2f - (bounds.top + bounds.bottom) / 2f
+                    canvas.drawTextRun(p.text, 0, p.text.length, 0, p.text.length, p.left - bounds.left, baselineY, false, paint)
+                }
+            }
+        }
+    }
+}
+
+private data class AndroidClusterRun(
+    val role: FontRole,
+    val style: TextStyle,
+)
+
+private inline fun LayoutResult.forEachAndroidPositionedCluster(
+    spans: List<TextSpan>,
+    action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, run: AndroidClusterRun) -> Unit,
+) {
+    val autoSpaceGap = 0.25f * input.textStyle.fontSize
+    val baseStyle = input.textStyle
+    val emphasisRanges = input.decorations
+        .filter { it.kind == DecorationKind.Emphasis }
+        .map { it.range }
+    val leadingConsumed = debug.geometryDecisions
+        .filter { it.leadingGlueConsumed > 0f }
+        .associate { it.range to it.leadingGlueConsumed }
+
+    for (line in lines) {
+        val lineClusters = clusters.filter { it.range.start >= line.range.start && it.range.end <= line.range.end }
+        var x = line.indent
+        for ((indexInLine, cluster) in lineClusters.withIndex()) {
+            val role = debug.fontDecisions.firstOrNull {
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role.toFontRole()
+            val isLatin = role == FontRole.LatinText
+            val spanStyle = spans.lastOrNull { cluster.range.start >= it.range.start && cluster.range.start < it.range.end }?.style
+            val italic = (spanStyle?.italic ?: false) ||
+                (isLatin && emphasisRanges.any { cluster.range.start >= it.start && cluster.range.start < it.end })
+            val style = (spanStyle ?: baseStyle).copy(italic = italic)
+            val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
+            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
+            if (cluster.displayText.isNotEmpty()) {
+                action(
+                    line,
+                    cluster,
+                    x + leadingGap - (leadingConsumed[cluster.range] ?: 0f),
+                    line.baseline + cluster.baselineShift,
+                    AndroidClusterRun(role, style),
+                )
+            }
+            x += cluster.advance
+        }
+    }
+}
+
+private fun String?.toFontRole(): FontRole =
+    runCatching { if (this == null) null else FontRole.valueOf(this) }.getOrNull() ?: FontRole.CjkText
+
+private fun drawContextShapedText(
+    canvas: android.graphics.Canvas,
+    text: String,
+    x: Float,
+    y: Float,
+    role: FontRole,
+    paint: TextPaint,
+) {
+    if (text.isEmpty()) return
+    val useHanContext = role == FontRole.CjkText || role == FontRole.CjkPunctuation
+    if (useHanContext) {
+        val buffer = "中${text}中"
+        canvas.drawTextRun(buffer, 1, 1 + text.length, 0, buffer.length, x, y, false, paint)
+    } else {
+        canvas.drawTextRun(text, 0, text.length, 0, text.length, x, y, false, paint)
+    }
+}
+
+private fun LayoutResult.androidLineInkSkipIntervals(
+    line: LineBox,
+    bandTop: Float,
+    bandBottom: Float,
+    spans: List<TextSpan>,
+    typefaces: AndroidTypefaceResolver,
+): FloatArray {
+    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        textLocale = Locale.forLanguageTag(input.textStyle.locale)
+    }
+    val bounds = Rect()
+    val out = mutableListOf<Float>()
+    forEachAndroidPositionedCluster(spans) { l, cluster, drawX, baselineY, run ->
+        if (l !== line) return@forEachAndroidPositionedCluster
+        paint.textSize = run.style.fontSize
+        paint.typeface = typefaces.resolve(run.role, run.style.fontFamilies, run.style.fontWeight, run.style.italic)
+        paint.getTextBounds(cluster.displayText, 0, cluster.displayText.length, bounds)
+        val top = baselineY + bounds.top
+        val bottom = baselineY + bounds.bottom
+        if (bottom >= bandTop && top <= bandBottom) {
+            out += drawX + bounds.left
+            out += drawX + bounds.right
+        }
+    }
+    return out.toFloatArray()
+}
+
+private inline fun keptIntervals(
+    left: Float,
+    right: Float,
+    skips: FloatArray,
+    gap: Float,
+    draw: (Float, Float) -> Unit,
+) {
+    val merged = ArrayList<FloatArray>()
+    var i = 0
+    while (i + 1 < skips.size) {
+        val s = (skips[i] - gap).coerceIn(left, right)
+        val e = (skips[i + 1] + gap).coerceIn(left, right)
+        if (e > s) merged += floatArrayOf(s, e)
+        i += 2
+    }
+    merged.sortBy { it[0] }
+    var cursor = left
+    for (iv in merged) {
+        if (iv[0] > cursor + 0.5f) draw(cursor, iv[0])
+        cursor = max(cursor, iv[1])
+    }
+    if (cursor < right - 0.5f) draw(cursor, right)
+}
+
+private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): Path {
+    val path = Path()
+    val halfWave = (fontSize * 0.125f).coerceAtLeast(1f)
+    val amplitude = fontSize * 0.06f
+    path.moveTo(left, y)
+    var x = left
+    var up = true
+    while (x < right) {
+        val nextX = (x + halfWave).coerceAtMost(right)
+        val controlY = if (up) y - amplitude * 2f else y + amplitude * 2f
+        path.quadTo((x + nextX) / 2f, controlY, nextX, y)
+        x = nextX
+        up = !up
+    }
+    return path
+}

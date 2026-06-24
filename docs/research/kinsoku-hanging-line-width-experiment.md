@@ -7,7 +7,7 @@
 2. 行尾悬挂在哪些行长收益最明显？
 
 复现：`./gradlew :tiqian-layout:jvmTest --tests '*KinsokuHangingExperimentProbe*'`
-（[KinsokuHangingExperimentProbe.kt](../../tiqian-layout/src/jvmTest/kotlin/ink/duo3/tiqian/layout/KinsokuHangingExperimentProbe.kt)）。
+（[KinsokuHangingExperimentProbe.kt](../../tiqian-layout/src/jvmTest/kotlin/org/tiqian/layout/KinsokuHangingExperimentProbe.kt)）。
 
 ## 方法
 

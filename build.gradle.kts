@@ -3,12 +3,15 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 plugins {
     kotlin("multiplatform") version "2.3.20" apply false
+    kotlin("android") version "2.3.20" apply false
     id("com.android.library") version "9.2.1" apply false
+    id("com.android.kotlin.multiplatform.library") version "9.2.1" apply false
+    id("com.android.application") version "9.2.1" apply false
     id("org.jetbrains.compose") version "1.11.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20" apply false
 }
 
-group = "ink.duo3.tiqian"
+group = "org.tiqian"
 version = "0.1.0-SNAPSHOT"
 
 subprojects {
