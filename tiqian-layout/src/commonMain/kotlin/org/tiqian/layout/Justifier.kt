@@ -36,7 +36,9 @@ import org.tiqian.font.FontRole
  * they take the uniform share like every other position — the user-ratified
  * reading of「加空白也是跟其他一样尽量均匀地加」. Excluded: 汉字↔西文 (that is
  * 中西间距, tier 2) and 西文↔西文 (word distance is tier 1, intra-word letter
- * spacing is never a tier).
+ * spacing is never a tier). Atomic long marks (dash / ellipsis) also keep both
+ * neighbours closed: stretching around a two-em dash reads as a generated space
+ * and violates the source-preserving long-mark model.
  */
 class Justifier(
     /** 中西间距的默认（autospace）宽度，拉伸从此起步. */
@@ -69,12 +71,12 @@ class Justifier(
          */
         cjkLatinSpaceMaxEm: Float = 0.5f,
         /**
-         * `AvoidStretchAroundConnectors` — CLREQ 平均拉大字距的限制②：
-         * 「避免对连接号、分隔号与其前后的字符进行拉伸处理」。Cluster
-         * indices of Connector / Solidus marks; boundaries touching them
-         * are excluded from the CjkInterChar tier.
+         * `NoStretchBoundaryClusters` — cluster indices whose adjacent
+         * boundaries stay closed in CjkInterChar. Covers CLREQ's explicit
+         * connector / solidus limit and the engine's atomic long-mark model
+         * for dash / ellipsis.
          */
-        avoidStretchClusters: Set<Int> = emptySet(),
+        noStretchBoundaryClusters: Set<Int> = emptySet(),
     ): JustificationPlan {
         require(clusterRoles.size == adjustedClusters.size) {
             "clusterRoles must align with adjustedClusters."
@@ -134,10 +136,11 @@ class Justifier(
         // 0.25em base up to 0.5em, every instance in the line by equal amounts
         // (CLREQ 拉伸第②档：同时、同等量). The same gap takes two shapes:
         //
-        //   (a) VIRTUAL — a CJK↔Latin cluster boundary with no typed space.
-        //       `IdeographAlphaJustifyBoundary`: same rule as autospace
-        //       (ADR 0009), ideograph ↔ alpha only; CjkPunctuation ↔ Latin is
-        //       punctuation-glue territory and gets nothing here.
+        //   (a) VIRTUAL — a CJK↔Latin cluster boundary with no typed space
+        //       whose boundary-adjacent western character is alpha/numeric.
+        //       `IdeographAlphaNumericJustifyBoundary`: same rule as autospace
+        //       (ADR 0009); punctuation-led LatinText runs such as `/TERFism`
+        //       keep Latin shaping but do not become 中西间距.
         //   (b) TYPED — an author U+0020 between an ideograph and a Latin word,
         //       which autospace normalised to the 0.25em base. It IS the 中西
         //       间距 and must stretch too (`TypedSinoWesternSpaceStretches`).
@@ -157,7 +160,7 @@ class Justifier(
                 // Headroom from the base 中西间距 up to the (style-set) cap.
                 capacity = ((cjkLatinSpaceMaxEm - cjkLatinSpaceBaseEm) * fontSize).coerceAtLeast(0f),
             ) { leftIdx, rightIdx ->
-                clusterRoles[leftIdx].isIdeographAlphaBoundaryWith(clusterRoles[rightIdx]) &&
+                isIdeographAlphaNumericBoundary(leftIdx, rightIdx, adjustedClusters, clusterRoles) &&
                     !adjustedClusters[leftIdx].text.endsWith(' ') &&
                     !adjustedClusters[rightIdx].text.startsWith(' ')
             } + buildList {
@@ -202,7 +205,7 @@ class Justifier(
         //     不可断标点 + 连接号/分隔号, NOT 标点↔西文). Only 汉字↔西文 stays
         //     out — that is 中西间距, handled by tier ② above.
         // Excluded: 西文↔西文 (word distance is tier ①, intra-word never), and
-        // the 连接号/分隔号 boundaries.
+        // the no-stretch boundaries.
         fun isWesternWord(idx: Int): Boolean =
             clusterRoles[idx] == FontRole.LatinText && adjustedClusters[idx].text.any { it != ' ' }
         val cjkInterOpps = buildBoundaryOpportunities(
@@ -218,9 +221,9 @@ class Justifier(
             val punctWestern = (l == FontRole.CjkPunctuation && isWesternWord(rightIdx)) ||
                 (isWesternWord(leftIdx) && r == FontRole.CjkPunctuation)
             (bothCjk || punctWestern) &&
-                // AvoidStretchAroundConnectors: boundaries touching 连接号/
-                // 分隔号 stay closed（CLREQ 拉伸限制②）.
-                leftIdx !in avoidStretchClusters && rightIdx !in avoidStretchClusters
+                // NoStretchBoundaryClusters: boundaries touching connectors,
+                // solidus, dash, or ellipsis stay closed.
+                leftIdx !in noStretchBoundaryClusters && rightIdx !in noStretchBoundaryClusters
         }
         remaining = allocate(
             deficit = remaining,
@@ -350,9 +353,25 @@ class Justifier(
         unfilledDeficit = unfilled.coerceAtLeast(0f),
     )
 
-    private fun FontRole.isIdeographAlphaBoundaryWith(other: FontRole): Boolean =
-        (this == FontRole.CjkText && other == FontRole.LatinText) ||
-            (this == FontRole.LatinText && other == FontRole.CjkText)
+    private fun isIdeographAlphaNumericBoundary(
+        leftIdx: Int,
+        rightIdx: Int,
+        clusters: List<Cluster>,
+        roles: List<FontRole>,
+    ): Boolean {
+        val left = roles[leftIdx]
+        val right = roles[rightIdx]
+        return when {
+            left == FontRole.CjkText && right == FontRole.LatinText ->
+                clusters[rightIdx].text.firstOrNull()?.isAlphaNumericAutoSpaceBoundaryChar() == true
+            left == FontRole.LatinText && right == FontRole.CjkText ->
+                clusters[leftIdx].text.lastOrNull()?.isAlphaNumericAutoSpaceBoundaryChar() == true
+            else -> false
+        }
+    }
+
+    private fun Char.isAlphaNumericAutoSpaceBoundaryChar(): Boolean =
+        isLetter() || isDigit()
 
     private fun FontRole.isCjkLike(): Boolean =
         this == FontRole.CjkText || this == FontRole.CjkPunctuation
@@ -380,9 +399,10 @@ class Justifier(
 
     /**
      * A typed sino-western gap: a space-run cluster with an ideograph on one
-     * side and a Latin WORD on the other (`TypedSinoWesternSpaceStretches`).
-     * Mirrors `isIdeographAlphaBoundaryWith` (CjkText ↔ LatinText only — a
-     * punctuation-adjacent typed space is glue territory, not 中西间距).
+     * side and an alpha/numeric western word edge on the other
+     * (`TypedSinoWesternSpaceStretches`). Mirrors
+     * `isIdeographAlphaNumericBoundary`: slash/bracket-adjacent typed spaces
+     * are punctuation/author spacing territory, not 中西间距.
      */
     private fun Cluster.isSinoWesternTypedSpace(
         idx: Int,
@@ -393,9 +413,11 @@ class Justifier(
         val leftCjk = idx > 0 && roles[idx - 1] == FontRole.CjkText
         val rightCjk = idx < clusters.lastIndex && roles[idx + 1] == FontRole.CjkText
         val leftLatinWord = idx > 0 &&
-            roles[idx - 1] == FontRole.LatinText && !clusters[idx - 1].text.all { it == ' ' }
+            roles[idx - 1] == FontRole.LatinText &&
+            clusters[idx - 1].text.lastOrNull()?.isAlphaNumericAutoSpaceBoundaryChar() == true
         val rightLatinWord = idx < clusters.lastIndex &&
-            roles[idx + 1] == FontRole.LatinText && !clusters[idx + 1].text.all { it == ' ' }
+            roles[idx + 1] == FontRole.LatinText &&
+            clusters[idx + 1].text.firstOrNull()?.isAlphaNumericAutoSpaceBoundaryChar() == true
         return (leftCjk && rightLatinWord) || (leftLatinWord && rightCjk)
     }
 }

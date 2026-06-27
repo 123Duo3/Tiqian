@@ -117,6 +117,26 @@ class AutoSpaceSingleGapTest {
     }
 
     @Test
+    fun autospaceDoesNotFireBeforeSlashLedLatinTechnicalRun() {
+        // `/TERFism` is shaped as one LatinText run so slash + acronym use a
+        // compatible western font and escape CJK punctuation geometry, but the
+        // boundary at `跨/` is still ideograph ↔ punctuation, not ideograph ↔
+        // alpha/numeric. TextAutoSpaceInsert must not synthesize `恐跨 /TERFism`.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("恐跨/TERFism。如果"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        val cluster = result.clusters.single { it.text == "/TERFism" }
+        assertTrue(
+            result.debug.autoSpaceDecisions.none { it.clusterRange == cluster.range && it.side == "leading" },
+            "slash-led Latin technical run must not receive leading autospace: ${result.debug.autoSpaceDecisions}",
+        )
+    }
+
+    @Test
     fun autospaceStillFiresBetweenLatinAndCjkTextEvenWithPunctuationNearby() {
         // The boundary is between Latin "shaping" and the CjkText `之`. The
         // closing bracket `）` next to it does not cancel the firing.

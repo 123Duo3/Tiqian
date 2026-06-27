@@ -89,6 +89,25 @@ Review 发现两处与 CLREQ 的残余出入：
   `GlueSideAwareJustification` 的拉伸侧禁令随之退役（它本是配合已删除
   的标点优先档的非对称扩张设计）；压缩侧的 glue 模型不受影响。
 
+### Amendment (2026-06-25): 原子长标号边界不参与 CjkInterChar
+
+知乎正文 dogfood 暴露出另一条边界：破折号 `——` 已按 CLREQ display
+substitution 合成 `⸺`，但 justify 末档仍把其右侧边界当普通
+`CjkInterChar`，视觉上变成 `—— 不`。这不是 source 空格，也不是字体缺字
+回滚，而是两端对齐阶段制造的假空隙。
+
+决议：
+
+- `NoStretchBoundaryClusters` 覆盖 Connector / Solidus / Dash / Ellipsis。
+  连接号、分隔号来自 CLREQ 明示限制；破折号、省略号来自项目的原子长标号
+  模型。
+- 破折号、省略号仍是一个 source-preserving display cluster：source range
+  保留原输入，display text 可替换为 CLREQ 推荐码点，但前后边界不作为均匀
+  tracking 机会。
+- 普通标点（括号内侧、点号前后、标点↔西文）仍按 2026-06-12/16 amendment
+  参与末档均匀 tracking；这次限制只针对不可拆长标号，避免把长标号误读成
+  “后面多了一个空格”。
+
 ## Consequences
 
 - 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。

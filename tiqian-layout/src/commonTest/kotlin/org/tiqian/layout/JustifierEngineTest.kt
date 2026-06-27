@@ -4,11 +4,18 @@ import org.tiqian.core.Ic
 
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.clreq.LineAdjustmentStrategy
+import org.tiqian.core.Cluster
+import org.tiqian.core.Glyph
+import org.tiqian.core.GlyphRun
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TiqianTextContent
+import org.tiqian.linebreak.NoHyphenator
+import org.tiqian.shaping.ShapingInput
+import org.tiqian.shaping.ShapingResult
+import org.tiqian.shaping.TextShaper
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -31,6 +38,40 @@ class JustifierEngineTest {
             }
         },
     )
+
+    private class PositionedPairShaper : TextShaper {
+        override fun shape(input: ShapingInput): ShapingResult {
+            val text = input.text.substring(input.range.start, input.range.end)
+            val advance = if (text == "AV") 10f else text.length * 16f
+            val glyphs = if (text == "AV") {
+                listOf(
+                    Glyph(id = 1u, clusterRange = input.range, advance = 5f, x = 0f),
+                    Glyph(id = 2u, clusterRange = input.range, advance = 5f, x = 5f),
+                )
+            } else {
+                listOf(Glyph(id = 3u, clusterRange = input.range, advance = advance, x = 0f))
+            }
+            return ShapingResult(
+                clusters = listOf(
+                    Cluster(
+                        range = input.range,
+                        text = text,
+                        displayText = input.displayText,
+                        fontKey = input.fontDecision.candidate.key,
+                        advance = advance,
+                    ),
+                ),
+                glyphRuns = listOf(
+                    GlyphRun(
+                        range = input.range,
+                        fontKey = input.fontDecision.candidate.key,
+                        glyphs = glyphs,
+                        advance = advance,
+                    ),
+                ),
+            )
+        }
+    }
 
     @Test
     fun connectorBoundariesAvoidStretchUnderJustification() {
@@ -99,6 +140,46 @@ class JustifierEngineTest {
         assertEquals(48f, line.adjustedWidth)
         assertEquals(48f, line.visualWidth)
         assertEquals(0, result.debug.justificationDecisions.size)
+    }
+
+    @Test
+    fun latinGlyphPositionsSurviveAutospaceAndJustification() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            textShaper = PositionedPairShaper(),
+            hyphenator = NoHyphenator,
+            clreqProfileResolver = {
+                ClreqProfile.MainlandHorizontal.let { p ->
+                    p.copy(adjustment = p.adjustment.copy(lineAdjustment = LineAdjustmentStrategy.PushOutOnly))
+                }
+            },
+        ).layout(
+            LayoutInput(
+                content = TiqianTextContent("中AV中文"),
+                constraints = LayoutConstraints(maxWidth = 52f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndent = Ic(0f),
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+
+        val latinCluster = result.clusters.single { it.text == "AV" }
+        assertTrue(
+            latinCluster.advance > 10f,
+            "autospace/justification should widen the cluster as trailing layout space: $latinCluster",
+        )
+        assertTrue(
+            result.debug.justificationDecisions
+                .flatMap { it.allocations }
+                .any { it.clusterRange == latinCluster.range && it.kind == "CjkLatinSpace" },
+            "the test must exercise a justify delta on the Latin cluster",
+        )
+
+        val latinGlyphs = result.glyphRuns
+            .flatMap { it.glyphs }
+            .filter { it.clusterRange == latinCluster.range }
+        assertEquals(listOf(0f, 5f), latinGlyphs.map { it.x })
+        assertEquals(listOf(5f, 5f), latinGlyphs.map { it.advance })
     }
 
     @Test
@@ -281,6 +362,36 @@ class JustifierEngineTest {
         // tier-③ share — 标点两侧含朝西文那侧都参与.
         assertTrue(decision.allocations.any { it.kind == "CjkInterChar" && it.clusterRange.start == 2 })
         assertTrue(decision.allocations.any { it.kind == "CjkInterChar" && it.clusterRange.start == 3 })
+    }
+
+    @Test
+    fun dashBoundariesDoNotReceiveUniformTracking() {
+        // The two-em dash is an indivisible long punctuation mark. If tier-③
+        // CjkInterChar opens the boundary after it, `下——不` looks like
+        // `下—— 不` in justified article text.
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("在所谓中文语境下——不如说中文"),
+                constraints = LayoutConstraints(maxWidth = 180f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndent = Ic(0f),
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        assertTrue(result.lines.size >= 2)
+        val dashCluster = result.clusters.single { it.text == "——" }
+        val dashIndex = result.clusters.indexOf(dashCluster)
+        val beforeDash = result.clusters[dashIndex - 1]
+        val allocations = result.debug.justificationDecisions.first().allocations
+        assertTrue(
+            allocations.none { it.kind == "CjkInterChar" && it.clusterRange == beforeDash.range },
+            "boundary before dash must stay closed: $allocations",
+        )
+        assertTrue(
+            allocations.none { it.kind == "CjkInterChar" && it.clusterRange == dashCluster.range },
+            "boundary after dash must stay closed: $allocations",
+        )
     }
 
     @Test

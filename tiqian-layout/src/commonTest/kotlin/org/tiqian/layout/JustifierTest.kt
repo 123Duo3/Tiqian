@@ -20,6 +20,7 @@ class JustifierTest {
     private fun cjk(at: Int) = Cluster(TextRange(at, at + 1), "中", fontKey = "cjk", advance = em)
     private fun space(at: Int) = Cluster(TextRange(at, at + 1), " ", fontKey = "latin", advance = 0.25f * em)
     private fun latin(at: Int, w: Float) = Cluster(TextRange(at, at + 2), "Hi", fontKey = "latin", advance = w)
+    private fun slashLatin(at: Int, w: Float) = Cluster(TextRange(at, at + 3), "/Hi", fontKey = "latin", advance = w)
 
     @Test
     fun typedSinoWesternSpaceStretchesInTierTwo() {
@@ -72,6 +73,47 @@ class JustifierTest {
         sino.forEach { assertEquals(0.25f * em, it.delta, 0.001f) }
         assertTrue(plan.allocations.any { it.kind == GlueKind.CjkInterChar }, "overflow spills to inter-char")
         assertEquals(0f, plan.unfilledDeficit)
+    }
+
+    @Test
+    fun virtualSinoWesternStretchRequiresAlphaNumericBoundaryChar() {
+        // 中/Hi中 — `/Hi` is LatinText for shaping, but the leading boundary is
+        // ideograph↔solidus, not ideograph↔alpha. Tier ② may stretch `Hi↔中`
+        // (target index 1), but must not synthesize `中 /Hi` (target index 0).
+        val clusters = listOf(cjk(0), slashLatin(1, 2f * em), cjk(4))
+        val roles = listOf(FontRole.CjkText, FontRole.LatinText, FontRole.CjkText)
+        val natural = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val plan = Justifier().justify(
+            adjustedClusters = clusters,
+            clusterRoles = roles,
+            lineClusterRange = clusters.indices,
+            maxWidth = natural + 0.2f * em,
+            fontSize = em,
+            skip = false,
+        )
+
+        val sino = plan.allocations.filter { it.kind == GlueKind.CjkLatinSpace }
+        assertEquals(listOf(1), sino.map { it.targetClusterIndex })
+    }
+
+    @Test
+    fun typedSpaceBeforeSlashLedLatinRunIsNotSinoWesternGap() {
+        // 中 /Hi — if the author typed a space before a slash-led technical run,
+        // it is preserved as ordinary source spacing. It must not be promoted to
+        // tier-② 中西间距 because the boundary-adjacent western char is `/`.
+        val clusters = listOf(cjk(0), space(1), slashLatin(2, 2f * em))
+        val roles = listOf(FontRole.CjkText, FontRole.LatinText, FontRole.LatinText)
+        val natural = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val plan = Justifier().justify(
+            adjustedClusters = clusters,
+            clusterRoles = roles,
+            lineClusterRange = clusters.indices,
+            maxWidth = natural + 0.2f * em,
+            fontSize = em,
+            skip = false,
+        )
+
+        assertTrue(plan.allocations.none { it.kind == GlueKind.CjkLatinSpace })
     }
 
     @Test

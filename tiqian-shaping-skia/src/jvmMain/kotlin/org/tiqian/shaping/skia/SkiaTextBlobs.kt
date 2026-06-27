@@ -5,7 +5,9 @@ import org.tiqian.core.ColorSpan
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineBox
 import org.tiqian.core.TextSpan
+import org.tiqian.core.positionedClusters
 import org.tiqian.core.TextStyle
+import org.tiqian.font.fontRoleNameUsesLatinFace
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontFeature
@@ -183,10 +185,9 @@ fun drawTiqianGlyphs(
 
 /**
  * The single positioned-cluster walk shared by drawing and skip-ink intercepts
- * (they must not drift). Yields each non-empty cluster with its canvas draw
- * origin: x stepping is the engine's resolved `cluster.advance`; a CJK↔Latin
- * Insert gap (autospace leading) shifts right a quarter em; consumed leading
- * glue shifts left.
+ * (they must not drift). Cluster x positions come from the core LayoutResult
+ * query API so rendering, hit testing, and accessibility geometry share the
+ * same Tiqian result.
  */
 internal inline fun LayoutResult.forEachPositionedCluster(
     cjkFont: Font,
@@ -195,7 +196,6 @@ internal inline fun LayoutResult.forEachPositionedCluster(
     spans: List<TextSpan> = emptyList(),
     action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, font: Font) -> Unit,
 ) {
-    val autoSpaceGap = 0.25f * input.textStyle.fontSize
     val baseStyle = input.textStyle
     // A cluster covered by a layout-affecting span draws through a font at THAT
     // size + weight + slant (the engine shaped it so), keyed to reuse instances.
@@ -206,18 +206,14 @@ internal inline fun LayoutResult.forEachPositionedCluster(
     val emphasisRanges = input.decorations
         .filter { it.kind == org.tiqian.core.DecorationKind.Emphasis }
         .map { it.range }
-    val leadingConsumed = debug.geometryDecisions
-        .filter { it.leadingGlueConsumed > 0f }
-        .associate { it.range to it.leadingGlueConsumed }
     for (line in lines) {
-        val lineClusters = clusters.filter { it.range.start >= line.range.start && it.range.end <= line.range.end }
-        var x = line.indent
         val baselineY = line.baseline + baselineOffset
-        for ((indexInLine, cluster) in lineClusters.withIndex()) {
+        for (positioned in positionedClusters(line)) {
+            val cluster = clusters[positioned.clusterIndex]
             val role = debug.fontDecisions.firstOrNull {
                 cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
             }?.role
-            val isLatin = role == "LatinText"
+            val isLatin = fontRoleNameUsesLatinFace(role) // LatinVsCjkFaceSelection (shared rule)
             val baseFont = if (isLatin) latinFont else cjkFont
             val style = spans.lastOrNull { cluster.range.start >= it.range.start && cluster.range.start < it.range.end }?.style
             val size = style?.fontSize ?: baseStyle.fontSize
@@ -241,13 +237,10 @@ internal inline fun LayoutResult.forEachPositionedCluster(
                     Font(tf, size)
                 }
             }
-            val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
-            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
             if (cluster.displayText.isNotEmpty()) {
                 // baselineShift aligns mixed non-Roman fonts/sizes by 字身框底部.
-                action(line, cluster, x + leadingGap - (leadingConsumed[cluster.range] ?: 0f), baselineY + cluster.baselineShift, font)
+                action(line, cluster, positioned.drawX, baselineY + cluster.baselineShift, font)
             }
-            x += cluster.advance
         }
     }
 }

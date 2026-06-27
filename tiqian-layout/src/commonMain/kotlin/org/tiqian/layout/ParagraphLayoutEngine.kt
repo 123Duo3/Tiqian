@@ -203,16 +203,15 @@ class ExplainableStubParagraphLayoutEngine(
             fontRoleClassifier
         }
 
-        val clusterRanges = clusterRanges(text, effectiveClassifier, context, clreqProfile, spanBoundaries)
-        val fontDecisions = clusterRanges.map { range ->
-            val role = effectiveClassifier.classify(text, range, context)
+        val clusterRanges = clusterRoleRanges(text, effectiveClassifier, context, clreqProfile, spanBoundaries)
+        val fontDecisions = clusterRanges.map { resolvedRange ->
             fallbackResolver.resolve(
                 text = text,
-                range = range,
+                range = resolvedRange.range,
                 request = FontRequest(
                     preferredFamilies = input.textStyle.fontFamilies,
                     locale = input.textStyle.locale,
-                    role = role,
+                    role = resolvedRange.role,
                 ),
             )
         }
@@ -956,11 +955,18 @@ class ExplainableStubParagraphLayoutEngine(
         val trimmedClusters = trimmedGeometry.resolveClusters()
         val edgeTrimDecisions = edgeTrimResult.decisions + autoSpaceEdgeDecisions
 
-        // AvoidStretchAroundConnectors（CLREQ 拉伸限制②）：连接号、分隔号
-        // 与其前后字符之间避免拉伸。
-        val avoidStretchClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
+        // NoStretchBoundaryClusters:
+        // - AvoidStretchAroundConnectors（CLREQ 拉伸限制②）：连接号、分隔号
+        //   与其前后字符之间避免拉伸；
+        // - AtomicLongPunctuationBoundary：破折号、省略号是不拆分的长标号，
+        //   前后均匀拉伸会制造「—— 不」式的假空格。
+        val noStretchBoundaryClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             when (atomClassByRange[naturalClusters[idx].range]) {
-                PunctuationClass.Connector, PunctuationClass.Solidus -> true
+                PunctuationClass.Connector,
+                PunctuationClass.Solidus,
+                PunctuationClass.Dash,
+                PunctuationClass.Ellipsis,
+                -> true
                 else -> false
             }
         }
@@ -999,7 +1005,7 @@ class ExplainableStubParagraphLayoutEngine(
                     skip = false,
                     allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
                     cjkLatinSpaceMaxEm = adjustmentStyle.sinoWesternStretchMaxEm,
-                    avoidStretchClusters = avoidStretchClusters,
+                    noStretchBoundaryClusters = noStretchBoundaryClusters,
                 )
             }
         }
@@ -1027,7 +1033,7 @@ class ExplainableStubParagraphLayoutEngine(
                 fontKey = runClusters.first().fontKey,
                 glyphs = runClusters.flatMapIndexed { fallbackGlyphId, cluster ->
                     shapedGlyphsByClusterRange[cluster.range]
-                        ?.mapToResolvedAdvance(cluster)
+                        ?.mapToClusterRange(cluster)
                         ?: listOf(
                             Glyph(
                                 id = fallbackGlyphId.toUInt(),
@@ -1090,6 +1096,7 @@ class ExplainableStubParagraphLayoutEngine(
             }
             LineBox(
                 range = lineCandidate.sourceRange,
+                clusterRange = lineCandidate.clusterRange,
                 baseline = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.baseline,
                 top = lineTop[lineIndex],
                 bottom = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.height,
@@ -1535,15 +1542,15 @@ class ExplainableStubParagraphLayoutEngine(
                 )
             }
 
-    private fun clusterRanges(
+    private fun clusterRoleRanges(
         text: String,
         classifier: FontRoleClassifier,
         context: FontRoleContext,
         profile: ClreqProfile,
         spanBoundaries: Set<Int> = emptySet(),
-    ): List<TextRange> {
+    ): List<ResolvedClusterRange> {
         val coalesceSet = profile.coalesceRepeatablePunctuation
-        val ranges = mutableListOf<TextRange>()
+        val ranges = mutableListOf<ResolvedClusterRange>()
         var index = 0
         while (index < text.length) {
             val codePoint = text.codePointAtCompat(index)
@@ -1571,7 +1578,7 @@ class ExplainableStubParagraphLayoutEngine(
                 }
             }
 
-            ranges.add(TextRange(start, index))
+            ranges.add(ResolvedClusterRange(TextRange(start, index), role))
         }
         return ranges
     }
@@ -1718,20 +1725,19 @@ class ExplainableStubParagraphLayoutEngine(
         }
     }
 
-    private fun List<Glyph>.mapToResolvedAdvance(cluster: Cluster): List<Glyph> {
+    // Glyph advances stay the shaper's NATURAL values — cluster-level spacing
+    // (autospace / justify / push-in) lives at the positioning layer, never
+    // smeared across interior glyphs (that smearing was the bug squeezing the
+    // letters of slash-led runs like `/TERFism`). The one exception is the
+    // degenerate no-ink fallback (missing-glyph fonts return 0 advance): there
+    // we distribute the cluster body so glyphs don't stack at one x.
+    private fun List<Glyph>.mapToClusterRange(cluster: Cluster): List<Glyph> {
         val sourceAdvance = sumOf { it.advance.toDouble() }.toFloat()
         if (sourceAdvance <= 0f) {
             val fallbackAdvance = cluster.advance / size.coerceAtLeast(1)
             return map { it.copy(advance = fallbackAdvance, clusterRange = cluster.range) }
         }
-
-        val scale = cluster.advance / sourceAdvance
-        return map { glyph ->
-            glyph.copy(
-                clusterRange = cluster.range,
-                advance = glyph.advance * scale,
-            )
-        }
+        return map { glyph -> glyph.copy(clusterRange = cluster.range) }
     }
 
     /**
@@ -1748,10 +1754,12 @@ class ExplainableStubParagraphLayoutEngine(
      * - **space-run cluster between two Latin words** — a word space
      *   (CLREQ 西文词距): untouched here; justification stretches it.
      * - **word cluster directly adjacent to CjkText** (no space cluster in
-     *   between) — `TextAutoSpaceInsert`: the gap is added into the word
-     *   cluster's advance on that side; renderers offset glyphs by the
-     *   recorded side decision. Only under [AutoSpaceMode.Insert];
-     *   [AutoSpaceMode.Replace] keeps the conservative behaviour.
+     *   between) — when the boundary-adjacent western character is alpha /
+     *   numeric, `TextAutoSpaceInsert` adds the gap into the word cluster's
+     *   advance on that side; renderers offset glyphs by the recorded side
+     *   decision. Only under [AutoSpaceMode.Insert]; [AutoSpaceMode.Replace]
+     *   keeps the conservative behaviour. Slash-led technical runs such as
+     *   `/TERFism` keep Latin shaping but do not create a `跨 /TERFism` gap.
      *
      * Punctuation neighbours never produce a gap (their spacing is the
      * punctuation glue model's job).
@@ -1766,11 +1774,16 @@ class ExplainableStubParagraphLayoutEngine(
         val roles = map { cluster -> fontDecisions.firstOrNull { cluster.range.isInside(it.range) }?.role }
         val decisions = mutableListOf<AutoSpaceDecisionInfo>()
         val gap = policy.gapEm * fontSize
-        // CLREQ distinguishes 字母 from 数字: the mode is chosen by the
-        // BOUNDARY-adjacent western character (`cjkDigit` for a digit,
-        // `cjkLatin` for a letter). Default they are identical (both Insert).
-        fun modeForWestern(boundaryChar: Char?): AutoSpaceMode =
-            if (boundaryChar != null && boundaryChar.isDigit()) policy.cjkDigit else policy.cjkLatin
+        // TextAutoSpaceIdeographAlphaNumericBoundary: CLREQ/CSS Text only fire
+        // at ideograph ↔ alpha/numeric boundaries. Font role alone is too
+        // coarse: slash-led runs are LatinText for shaping, but `/` remains
+        // punctuation for spacing.
+        fun modeForWestern(boundaryChar: Char?): AutoSpaceMode? = when {
+            boundaryChar == null -> null
+            boundaryChar.isDigit() -> policy.cjkDigit
+            boundaryChar.isLetter() -> policy.cjkLatin
+            else -> null
+        }
 
         val updated = mapIndexed { idx, cluster ->
             if (roles[idx] != FontRole.LatinText) return@mapIndexed cluster
@@ -1786,7 +1799,8 @@ class ExplainableStubParagraphLayoutEngine(
                     prevRole == FontRole.CjkText -> getOrNull(idx + 1)?.text?.firstOrNull()
                     else -> getOrNull(idx - 1)?.text?.lastOrNull()
                 }
-                if (modeForWestern(westernChar) == AutoSpaceMode.Disabled) return@mapIndexed cluster
+                val mode = modeForWestern(westernChar)
+                if (mode == null || mode == AutoSpaceMode.Disabled) return@mapIndexed cluster
                 val reduction = cluster.advance - gap
                 if (reduction == 0f) return@mapIndexed cluster
                 decisions += AutoSpaceDecisionInfo(
@@ -2402,6 +2416,11 @@ private data class PunctuationClusterGeometry(
     val leadingGlueNatural: Float,
     val trailingGlueNatural: Float,
     val reason: String,
+)
+
+private data class ResolvedClusterRange(
+    val range: TextRange,
+    val role: FontRole,
 )
 
 private data class GlueBudget(

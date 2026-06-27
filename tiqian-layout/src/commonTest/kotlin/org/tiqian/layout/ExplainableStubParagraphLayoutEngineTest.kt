@@ -454,6 +454,24 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun keepsSlashLedLatinTechnicalRunOutOfCjkPunctuationGeometry() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("恐跨/TERFism。如果"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val latinRun = result.debug.fontDecisions.single { it.sourceText == "/TERFism" }
+        assertEquals(FontRole.LatinText.name, latinRun.role)
+        assertTrue(result.debug.punctuationDecisions.none { it.range == latinRun.range })
+        val cluster = result.clusters.single { it.text == "/TERFism" }
+        assertEquals("latin-primary", cluster.fontKey)
+        assertTrue(cluster.advance > 16f)
+    }
+
+    @Test
     fun recordsRoleOverridesForResolvedQuotePairs() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

@@ -37,6 +37,7 @@ class CjkFontRoleClassifierTest {
         assertEquals(FontRole.LatinText, classifier.classify("well-known", TextRange(4, 5)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(6, 7)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(7, 8)))
+        assertEquals(FontRole.LatinText, classifier.classify("中文/TERFism", TextRange(2, 3)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4E2D\u6587/\u4E2D\u6587", TextRange(2, 3)))
     }
 
